@@ -59,7 +59,7 @@ export default function LoginPage() {
               Platform Kolaborasi Guru & Wali Murid
             </h1>
             <p className="text-indigo-200 text-sm leading-relaxed">
-              MyClass mempermudah pemantauan perkembangan akademis, keaktifan, kedisiplinan, hingga pembiasaan ibadah mandiri siswa di rumah dalam satu platform terintegrasi.
+              MyClass mempermudah pemantauan perkembangan akademis, keaktifan, kedisiplinan, hingga pembiasaan ibadah mandiri murid di rumah dalam satu platform terintegrasi.
             </p>
           </div>
 
@@ -77,7 +77,7 @@ export default function LoginPage() {
               <div className="text-xl mt-0.5">⭐</div>
               <div>
                 <h4 className="font-bold text-sm text-white">Poin Keaktifan & Prestasi</h4>
-                <p className="text-xs text-indigo-200 mt-0.5">Penghargaan poin untuk keaktifan kelas, hafalan qur'an, serta portofolio karya siswa.</p>
+                <p className="text-xs text-indigo-200 mt-0.5">Penghargaan poin untuk keaktifan kelas, hafalan qur'an, serta portofolio karya murid.</p>
               </div>
             </div>
 
@@ -150,7 +150,7 @@ export default function LoginPage() {
                     type="text"
                     required
                     className="block w-full pl-10 pr-4 py-3 bg-slate-50/50 border border-slate-200 rounded-xl text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 focus:bg-white text-sm font-semibold transition-all"
-                    placeholder="NIG Guru / NISN Siswa / admin"
+                    placeholder="NIG Guru / NISN Murid / admin"
                   />
                 </div>
               </div>

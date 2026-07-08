@@ -15,7 +15,7 @@ export default function DeleteCreativityButton({ id }: DeleteCreativityButtonPro
     e.preventDefault();
     e.stopPropagation();
 
-    if (confirm('Apakah Anda yakin ingin menghapus karya kreativitas ini? Poin siswa yang bersangkutan juga akan berkurang.')) {
+    if (confirm('Apakah Anda yakin ingin menghapus karya kreativitas ini? Poin murid yang bersangkutan juga akan berkurang.')) {
       startTransition(async () => {
         const result = await destroyCreativityAction(id);
         if (result?.error) {

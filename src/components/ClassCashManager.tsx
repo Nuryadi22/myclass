@@ -266,7 +266,7 @@ export default function ClassCashManager({
               <h3 className="text-xl font-extrabold text-emerald-600">
                 Rp {totalIncome.toLocaleString('id-ID')}
               </h3>
-              <span className="text-[9px] text-slate-400 font-semibold block">Dari iuran siswa dll</span>
+              <span className="text-[9px] text-slate-400 font-semibold block">Dari iuran murid dll</span>
             </div>
             <div className="w-10 h-10 rounded-xl bg-slate-50 text-emerald-650 flex items-center justify-center">
               <Banknote className="w-5 h-5" />
@@ -293,8 +293,8 @@ export default function ClassCashManager({
           {/* Tab Selection */}
           <div className="flex border-b border-slate-100 pb-4 justify-between items-center">
             <div>
-              <h3 className="font-extrabold text-slate-850 text-base">Catat Transaksi Baru</h3>
-              <p className="text-[10px] text-slate-400 font-semibold mt-0.5">Input uang kas masuk dari siswa atau pengeluaran operasional.</p>
+              <h3 className="font-extrabold text-slate-855 text-slate-850 text-base">Catat Transaksi Baru</h3>
+              <p className="text-[10px] text-slate-400 font-semibold mt-0.5">Input uang kas masuk dari murid atau pengeluaran operasional.</p>
             </div>
             <div className="flex gap-1.5 p-1 bg-slate-100 rounded-xl text-xs font-bold">
               <button
@@ -343,7 +343,7 @@ export default function ClassCashManager({
               {tab === 'income' ? (
                 <div>
                   <label htmlFor="student_id" className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">
-                    Nama Siswa Pembayar
+                    Nama Murid Pembayar
                   </label>
                   <select
                     id="student_id"
@@ -351,13 +351,13 @@ export default function ClassCashManager({
                     required
                     className="block w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-800 focus:border-slate-800 focus:bg-white text-xs font-semibold transition-all cursor-pointer"
                   >
-                    <option value="">-- Pilih Siswa --</option>
+                    <option value="">-- Pilih Murid --</option>
                     {students.map((std) => (
                       <option key={std.id} value={std.id}>
                         {std.name} ({std.studentId})
                       </option>
                     ))}
-                    <option value="other">Lainnya (Bukan Siswa)</option>
+                    <option value="other">Lainnya (Bukan Murid)</option>
                   </select>
                 </div>
               ) : (

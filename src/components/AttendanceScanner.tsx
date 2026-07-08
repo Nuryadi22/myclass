@@ -97,7 +97,7 @@ export default function AttendanceScanner({ students }: AttendanceScannerProps) 
     const status = formData.get('status') as string;
 
     if (!studentId) {
-      setStatusMsg({ type: 'error', text: 'Silakan pilih siswa terlebih dahulu.' });
+      setStatusMsg({ type: 'error', text: 'Silakan pilih murid terlebih dahulu.' });
       return;
     }
 
@@ -169,7 +169,7 @@ export default function AttendanceScanner({ students }: AttendanceScannerProps) 
       {/* Scanner Section */}
       {activeTab === 'qr' ? (
         <div className="space-y-4 text-center">
-          <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">Arahkan kartu QR Code siswa ke kamera</p>
+          <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">Arahkan kartu QR Code murid ke kamera</p>
           <div className="w-full max-w-md mx-auto aspect-square bg-slate-900 rounded-3xl overflow-hidden shadow-lg border border-slate-100 relative">
             <div id="qr-reader" className="w-full h-full" />
             {isPending && (
@@ -185,13 +185,13 @@ export default function AttendanceScanner({ students }: AttendanceScannerProps) 
         <div className="bg-white rounded-3xl border border-slate-100 p-6 space-y-6 shadow-xs max-w-md mx-auto animate-fade-in">
           <div>
             <h3 className="font-extrabold text-slate-850 text-base">Cetak Kehadiran Manual</h3>
-            <p className="text-xs text-slate-400 font-semibold mt-1">Isi data kehadiran siswa tanpa melalui pemindaian QR Code.</p>
+            <p className="text-xs text-slate-400 font-semibold mt-1">Isi data kehadiran murid tanpa melalui pemindaian QR Code.</p>
           </div>
 
           <form onSubmit={handleManualSubmit} className="space-y-4">
             <div>
               <label htmlFor="student_id" className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">
-                Pilih Siswa
+                Pilih Murid
               </label>
               <select
                 id="student_id"
@@ -199,7 +199,7 @@ export default function AttendanceScanner({ students }: AttendanceScannerProps) 
                 required
                 className="block w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-800 focus:border-slate-800 focus:bg-white text-xs font-semibold transition-all cursor-pointer"
               >
-                <option value="">-- Pilih Siswa --</option>
+                <option value="">-- Pilih Murid --</option>
                 {students.map((student) => (
                   <option key={student.id} value={student.studentId}>
                     {student.name} ({student.studentId})

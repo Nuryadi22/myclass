@@ -30,7 +30,7 @@ export default async function TeacherActivityPage() {
       <div>
         <h2 className="text-2xl font-extrabold text-slate-800 tracking-tight">Pencatatan Keaktifan Harian</h2>
         <p className="text-slate-500 text-sm font-semibold">
-          Catat setoran hafalan Quran, aktivitas literasi membaca, dan kemampuan numerasi matematika siswa.
+          Catat setoran hafalan Quran, aktivitas literasi membaca, dan kemampuan numerasi matematika murid.
         </p>
       </div>
 
@@ -38,9 +38,9 @@ export default async function TeacherActivityPage() {
         {/* Recent Activities List (Spans 2 cols) */}
         <div className="lg:col-span-2 bg-white rounded-3xl border border-slate-100 p-6 space-y-6 shadow-xs">
           <div>
-            <h4 className="font-extrabold text-slate-850 text-base">10 Log Aktivitas Keaktifan Terbaru</h4>
+            <h4 className="font-extrabold text-slate-855 text-slate-850 text-base">10 Log Aktivitas Keaktifan Terbaru</h4>
             <p className="text-xs text-slate-400 font-semibold mt-1">
-              Catatan keaktifan siswa yang baru dimasukkan hari ini.
+              Catatan keaktifan murid yang baru dimasukkan hari ini.
             </p>
           </div>
 

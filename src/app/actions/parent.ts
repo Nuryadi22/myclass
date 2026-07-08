@@ -24,18 +24,18 @@ export async function storePrayerAction(prevState: any, formData: FormData) {
   const isya = formData.get('isya') === 'on';
 
   if (!studentId || !date) {
-    return { error: 'Siswa dan Tanggal wajib diisi.' };
+    return { error: 'Murid dan Tanggal wajib diisi.' };
   }
 
   try {
     const student = await prisma.student.findUnique({ where: { id: studentId } });
     if (!student) {
-      return { error: 'Siswa tidak ditemukan.' };
+      return { error: 'Murid tidak ditemukan.' };
     }
 
     // Check ownership
     if (student.parentId !== session.userId) {
-      return { error: 'Akses ilegal. Siswa ini bukan anak Anda.' };
+      return { error: 'Akses ilegal. Murid ini bukan anak Anda.' };
     }
 
     // Check existing prayer record
@@ -154,7 +154,7 @@ export async function storeAttendanceRequestAction(prevState: any, formData: For
   const imageFile = formData.get('photo') as File | null;
 
   if (!studentId || !status || !date) {
-    return { error: 'Siswa, Status, dan Tanggal wajib diisi.' };
+    return { error: 'Murid, Status, dan Tanggal wajib diisi.' };
   }
 
   try {
@@ -163,7 +163,7 @@ export async function storeAttendanceRequestAction(prevState: any, formData: For
     });
 
     if (!student || student.parentId !== session.userId) {
-      return { error: 'Siswa tidak ditemukan atau data tidak valid.' };
+      return { error: 'Murid tidak ditemukan atau data tidak valid.' };
     }
 
     let photoPath: string | null = null;

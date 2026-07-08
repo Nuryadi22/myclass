@@ -63,12 +63,12 @@ export default async function AdminDashboardPage() {
           </div>
         </div>
 
-        {/* Card 2: Total Siswa */}
+        {/* Card 2: Total Murid */}
         <div className="bg-white rounded-3xl border border-slate-100 p-6 flex items-center justify-between shadow-xs hover:shadow-md transition-shadow">
           <div className="space-y-1">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Total Siswa</span>
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Total Murid</span>
             <h3 className="text-3xl font-extrabold text-slate-850">{totalStudents}</h3>
-            <span className="text-[10px] text-emerald-600 font-bold block">Siswa Aktif Terpantau</span>
+            <span className="text-[10px] text-emerald-600 font-bold block">Murid Aktif Terpantau</span>
           </div>
           <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
             <GraduationCap className="w-6 h-6" />
@@ -89,19 +89,19 @@ export default async function AdminDashboardPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* Top 5 Students Performance */}
+        {/* Top 5 Murid Performance */}
         <div className="bg-white rounded-3xl border border-slate-100 p-6 space-y-6 shadow-xs">
           <div>
             <h4 className="font-extrabold text-slate-850 text-lg flex items-center gap-2">
               <Award className="w-5 h-5 text-amber-500" />
-              <span>Top 5 Poin Tertinggi Siswa</span>
+              <span>Top 5 Poin Tertinggi Murid</span>
             </h4>
-            <p className="text-xs text-slate-400 font-semibold mt-1">Siswa dengan perolehan akumulasi poin keaktifan tertinggi.</p>
+            <p className="text-xs text-slate-400 font-semibold mt-1">Murid dengan perolehan akumulasi poin keaktifan tertinggi.</p>
           </div>
 
           <div className="space-y-4">
             {topStudents.length === 0 ? (
-              <p className="text-sm text-slate-400 text-center py-8">Belum ada data siswa.</p>
+              <p className="text-sm text-slate-400 text-center py-8">Belum ada data murid.</p>
             ) : (
               topStudents.map((student, idx) => {
                 const widthPercent = maxPoints > 0 ? (student.totalPoints / maxPoints) * 100 : 0;
@@ -142,7 +142,7 @@ export default async function AdminDashboardPage() {
               <CheckCircle className="w-5 h-5 text-indigo-500" />
               <span>Juara Bertahan Tiap Kelas</span>
             </h4>
-            <p className="text-xs text-slate-400 font-semibold mt-1">Siswa dengan poin terbanyak dari masing-masing tingkatan kelas.</p>
+            <p className="text-xs text-slate-400 font-semibold mt-1">Murid dengan poin terbanyak dari masing-masing tingkatan kelas.</p>
           </div>
 
           <div className="overflow-x-auto">
@@ -150,7 +150,7 @@ export default async function AdminDashboardPage() {
               <thead>
                 <tr className="border-b border-slate-100 text-slate-400 text-xs font-bold uppercase tracking-wider">
                   <th className="py-3 px-2">Kelas</th>
-                  <th className="py-3 px-2">Nama Siswa</th>
+                  <th className="py-3 px-2">Nama Murid</th>
                   <th className="py-3 px-2 text-right">Poin</th>
                 </tr>
               </thead>

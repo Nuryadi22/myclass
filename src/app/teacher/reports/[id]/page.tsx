@@ -11,16 +11,30 @@ import {
   ArrowLeft
 } from 'lucide-react';
 import Link from 'next/link';
+import ReportPrintFilter from '@/components/ReportPrintFilter';
+import { getSession } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
 interface PageProps {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ month?: string; school_year?: string; place?: string }>;
 }
 
-export default async function TeacherStudentReportDetailPage({ params }: PageProps) {
+export default async function TeacherStudentReportDetailPage({ params, searchParams }: PageProps) {
   const { id } = await params;
+  const { month, school_year, place } = await searchParams;
   const studentId = parseInt(id, 10);
+  const selectedYear = school_year || '2025/2026';
+  const printPlace = place || 'Jakarta';
+
+  const session = await getSession();
+  const teacherName = session?.name || 'Wali Kelas';
+  const todayIndoDate = new Intl.DateTimeFormat('id-ID', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric'
+  }).format(new Date());
 
   if (isNaN(studentId)) {
     notFound();
@@ -41,7 +55,7 @@ export default async function TeacherStudentReportDetailPage({ params }: PagePro
   }
 
   // Fetch all related logs
-  const activities = await prisma.activity.findMany({
+  const rawActivities = await prisma.activity.findMany({
     where: { studentId },
     include: {
       teacher: { select: { name: true } },
@@ -49,12 +63,12 @@ export default async function TeacherStudentReportDetailPage({ params }: PagePro
     orderBy: { createdAt: 'desc' },
   });
 
-  const creativities = await prisma.creativity.findMany({
+  const rawCreativities = await prisma.creativity.findMany({
     where: { studentId },
     orderBy: { createdAt: 'desc' },
   });
 
-  const attendances = await prisma.attendance.findMany({
+  const rawAttendances = await prisma.attendance.findMany({
     where: { studentId },
     include: {
       scannedBy: { select: { name: true } },
@@ -62,40 +76,102 @@ export default async function TeacherStudentReportDetailPage({ params }: PagePro
     orderBy: { date: 'desc' },
   });
 
-  const prayers = await prisma.prayer.findMany({
+  const rawPrayers = await prisma.prayer.findMany({
     where: { studentId },
     orderBy: { date: 'desc' },
   });
 
+  // Filter lists by selected month if present
+  const activities = month
+    ? rawActivities.filter(act => {
+        const date = new Date(act.createdAt);
+        return (date.getMonth() + 1).toString().padStart(2, '0') === month;
+      })
+    : rawActivities;
+
+  const creativities = month
+    ? rawCreativities.filter(cr => {
+        const date = new Date(cr.createdAt);
+        return (date.getMonth() + 1).toString().padStart(2, '0') === month;
+      })
+    : rawCreativities;
+
+  const attendances = month
+    ? rawAttendances.filter(att => att.date.split('-')[1] === month)
+    : rawAttendances;
+
+  const prayers = month
+    ? rawPrayers.filter(pr => pr.date.split('-')[1] === month)
+    : rawPrayers;
+
+  // Resolve month name for label display
+  const monthsNames: Record<string, string> = {
+    '01': 'Januari', '02': 'Februari', '03': 'Maret', '04': 'April',
+    '05': 'Mei', '06': 'Juni', '07': 'Juli', '08': 'Agustus',
+    '09': 'September', '10': 'Oktober', '11': 'November', '12': 'Desember'
+  };
+  const selectedMonthName = month ? monthsNames[month] : '';
+
   return (
     <div className="space-y-8 animate-fade-in">
-      {/* Back Button & Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="space-y-2">
-          <Link
-            href="/teacher/reports"
-            className="inline-flex items-center gap-1 text-xs font-bold text-slate-500 hover:text-slate-800 transition-colors"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            Kembali ke Rekap Laporan
-          </Link>
-          <h2 className="text-2xl font-extrabold text-slate-800 tracking-tight">Detail Laporan Siswa</h2>
-        </div>
-      </div>
+      {/* Print Controls (Hidden when printing) */}
+      <ReportPrintFilter studentId={student.id} />
 
-      {/* Student Profile Card */}
-      <div className="bg-white rounded-3xl border border-slate-100 p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6 shadow-xs">
+      {/* Printable Area Wrapper */}
+      <div id="print-area" className="space-y-8">
+        {/* CSS rules for printing */}
+        <style dangerouslySetInnerHTML={{__html: `
+          @media print {
+            body {
+              background: white !important;
+              color: black !important;
+            }
+            .no-print {
+              display: none !important;
+            }
+            #print-area {
+              width: 100% !important;
+              padding: 0 !important;
+              margin: 0 !important;
+            }
+            .bg-white {
+              border: none !important;
+              box-shadow: none !important;
+              padding: 0 !important;
+            }
+            .grid {
+              display: grid !important;
+            }
+          }
+        `}} />
+
+        {/* Back Button & Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 no-print">
+          <div className="space-y-2">
+            <Link
+              href="/teacher/reports"
+              className="inline-flex items-center gap-1 text-xs font-bold text-slate-500 hover:text-slate-800 transition-colors"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              Kembali ke Rekap Laporan
+            </Link>
+            <h2 className="text-2xl font-extrabold text-slate-800 tracking-tight">Detail Laporan Murid</h2>
+          </div>
+        </div>
+
+        {/* Student Profile Card */}
+        <div className="bg-white rounded-3xl border border-slate-100 p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6 shadow-xs">
         <div className="flex items-center gap-4">
           <div className="w-14 h-14 rounded-2xl bg-indigo-50 text-indigo-700 flex items-center justify-center font-bold text-xl shadow-xs">
             {student.name.substring(0, 2).toUpperCase()}
           </div>
           <div className="space-y-0.5">
             <h3 className="text-lg font-extrabold text-slate-900">{student.name}</h3>
-            <p className="text-xs text-slate-400 font-bold">
-              Kelas: {student.className} | NISN: {student.studentId}
+            <p className="text-xs text-slate-500 font-bold">
+              Kelas: {student.className}
             </p>
-            <p className="text-[10px] text-slate-500 font-semibold">
-              Orang Tua: {student.parent?.name || '-'} (Username: {student.parent?.username || '-'})
+            <p className="text-xs text-slate-500 font-bold">
+              NISN: {student.studentId}
             </p>
           </div>
         </div>
@@ -103,187 +179,91 @@ export default async function TeacherStudentReportDetailPage({ params }: PagePro
           <span className="text-[9px] uppercase tracking-wider font-extrabold text-amber-600 block">Total Poin Akumulatif</span>
           <h4 className="text-2xl font-extrabold text-amber-800 mt-0.5">⭐ {student.totalPoints} Poin</h4>
         </div>
-      </div>
+      </div>      <div className="bg-white rounded-3xl border border-slate-100 p-6 space-y-6 shadow-xs mt-8">
+        <h3 className="text-base font-extrabold text-slate-855 border-b pb-3 uppercase tracking-wide text-center">
+          Rekapitulasi Hasil Belajar
+        </h3>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* Attendance Logs */}
-        <div className="bg-white rounded-3xl border border-slate-100 p-6 space-y-6 shadow-xs">
-          <div>
-            <h4 className="font-extrabold text-slate-855 text-base flex items-center gap-2">
-              <Calendar className="w-5 h-5 text-indigo-600" />
-              <span>Log Riwayat Kehadiran</span>
-            </h4>
-            <p className="text-xs text-slate-400 font-semibold mt-1">Kehadiran harian yang dicatat oleh guru.</p>
-          </div>
-
-          <div className="max-h-96 overflow-y-auto pr-1 space-y-3">
-            {attendances.length === 0 ? (
-              <p className="text-xs text-slate-400 text-center py-8">Belum ada riwayat absensi.</p>
-            ) : (
-              attendances.map((att) => {
-                const dateStr = new Date(att.date).toLocaleDateString('id-ID', {
-                  day: 'numeric',
-                  month: 'short',
-                  year: 'numeric',
-                });
-                return (
-                  <div
-                    key={att.id}
-                    className="flex items-center justify-between p-3 bg-slate-50/50 border border-slate-100/50 rounded-2xl text-xs"
-                  >
-                    <div>
-                      <span className="font-extrabold text-slate-850 block leading-tight">{dateStr}</span>
-                      <span className="text-[9px] text-slate-400 font-bold block mt-0.5">
-                        Jam: {att.time.substring(0, 5)} WIB | Oleh: {att.scannedBy?.name || 'Sistem'}
-                      </span>
-                    </div>
-                    <span className={`px-2.5 py-1 rounded-lg text-[10px] font-extrabold uppercase ${
-                      att.status === 'present'
-                        ? 'bg-emerald-50 text-emerald-700'
-                        : att.status === 'late'
-                        ? 'bg-amber-50 text-amber-700'
-                        : att.status === 'sick'
-                        ? 'bg-blue-50 text-blue-700'
-                        : att.status === 'excused'
-                        ? 'bg-indigo-50 text-indigo-700'
-                        : 'bg-red-50 text-red-700'
-                    }`}>
-                      {att.status === 'present' ? 'Hadir' : att.status === 'late' ? 'Terlambat' : att.status === 'sick' ? 'Sakit' : att.status === 'excused' ? 'Izin' : 'Alfa'}
-                    </span>
-                  </div>
-                );
-              })
-            )}
-          </div>
-        </div>
-
-        {/* Keaktifan & Punishment Logs */}
-        <div className="bg-white rounded-3xl border border-slate-100 p-6 space-y-6 shadow-xs">
-          <div>
-            <h4 className="font-extrabold text-slate-855 text-base flex items-center gap-2">
-              <Award className="w-5 h-5 text-indigo-600" />
-              <span>Log Keaktifan & Punishment</span>
-            </h4>
-            <p className="text-xs text-slate-400 font-semibold mt-1">Penghargaan poin keaktifan atau pemotongan pelanggaran.</p>
-          </div>
-
-          <div className="max-h-96 overflow-y-auto pr-1 space-y-3">
-            {activities.length === 0 ? (
-              <p className="text-xs text-slate-400 text-center py-8">Belum ada aktivitas keaktifan/hukuman.</p>
-            ) : (
-              activities.map((act) => {
-                const dateStr = new Date(act.createdAt).toLocaleDateString('id-ID', {
-                  day: 'numeric',
-                  month: 'short',
-                  year: 'numeric',
-                });
-                return (
-                  <div
-                    key={act.id}
-                    className={`flex items-center justify-between p-3 border rounded-2xl text-xs ${
-                      act.type === 'punishment'
-                        ? 'bg-red-50/20 border-red-100/30'
-                        : 'bg-slate-50/50 border-slate-100/50'
-                    }`}
-                  >
-                    <div>
-                      <span className="font-extrabold text-slate-850 block leading-tight">{act.title}</span>
-                      <span className="text-[9px] text-slate-400 font-bold uppercase block mt-0.5">
-                        Tipe: {act.type} • Dicatat {dateStr}
-                      </span>
-                    </div>
-                    <span className={`font-extrabold text-sm ${act.pointsImpact > 0 ? 'text-emerald-600' : 'text-red-500'}`}>
-                      {act.pointsImpact > 0 ? `+${act.pointsImpact}` : act.pointsImpact} Poin
-                    </span>
-                  </div>
-                );
-              })
-            )}
-          </div>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* Creativity Portfolio Gallery */}
-        <div className="bg-white rounded-3xl border border-slate-100 p-6 space-y-6 shadow-xs">
-          <div>
-            <h4 className="font-extrabold text-slate-855 text-base flex items-center gap-2">
-              <ImageIcon className="w-5 h-5 text-indigo-600" />
-              <span>Portofolio Kreativitas</span>
-            </h4>
-            <p className="text-xs text-slate-400 font-semibold mt-1">Karya seni dan kerajinan tangan yang diunggah.</p>
-          </div>
-
-          <div className="max-h-96 overflow-y-auto pr-1 space-y-4">
-            {creativities.length === 0 ? (
-              <p className="text-xs text-slate-400 text-center py-8">Belum ada karya kreativitas diunggah.</p>
-            ) : (
-              <div className="grid grid-cols-2 gap-4">
-                {creativities.map((cr) => (
-                  <div key={cr.id} className="bg-slate-50 border border-slate-100 rounded-2xl overflow-hidden shadow-2xs">
-                    <div className="aspect-video bg-slate-200">
-                      <img src={`/${cr.imagePath}`} alt={cr.title} className="object-cover w-full h-full" />
-                    </div>
-                    <div className="p-3 space-y-1">
-                      <h5 className="font-extrabold text-slate-850 text-xs truncate">{cr.title}</h5>
-                      <span className="text-[9px] text-emerald-600 font-extrabold block">⭐ +{cr.pointsAwarded} Poin</span>
-                    </div>
-                  </div>
-                ))}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-xs text-slate-700">
+          {/* Left Box: Poin & Absensi */}
+          <div className="space-y-4">
+            <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 space-y-2">
+              <span className="font-bold text-slate-500 uppercase tracking-wide block text-[10px] border-b pb-1.5">REKAPITULASI KEAKTIFAN MURID</span>
+              <div className="grid grid-cols-2 gap-y-1 font-semibold text-[11px] text-slate-700">
+                <div>Setoran Hafalan:</div><div className="text-right font-bold">{activities.filter(a => a.type === 'memorization').length} Kali</div>
+                <div>Literasi:</div><div className="text-right font-bold">{activities.filter(a => a.type === 'literacy').length} Kali</div>
+                <div>Numerasi:</div><div className="text-right font-bold">{activities.filter(a => a.type === 'numeracy').length} Kali</div>
+                <div>Karya Kreatif:</div><div className="text-right font-bold">{creativities.length} Karya</div>
               </div>
-            )}
-          </div>
-        </div>
+            </div>
 
-        {/* Monitoring Shalat Mandiri */}
-        <div className="bg-white rounded-3xl border border-slate-100 p-6 space-y-6 shadow-xs">
-          <div>
-            <h4 className="font-extrabold text-slate-855 text-base flex items-center gap-2">
-              <ClipboardList className="w-5 h-5 text-indigo-600" />
-              <span>Monitoring Shalat Mandiri (Rumah)</span>
-            </h4>
-            <p className="text-xs text-slate-400 font-semibold mt-1">Ceklis ibadah harian yang dilaporkan orang tua.</p>
+            <div className="border border-slate-200 rounded-2xl p-4 space-y-2">
+              <span className="font-bold text-slate-800 uppercase tracking-wide block text-[10px] border-b pb-1.5">REKAPITULASI KEHADIRAN</span>
+              <div className="grid grid-cols-2 gap-y-1 font-semibold">
+                <div>Hadir:</div><div className="text-right font-bold">{attendances.filter(a => a.status === 'present').length} Hari</div>
+                <div>Terlambat:</div><div className="text-right font-bold">{attendances.filter(a => a.status === 'late').length} Hari</div>
+                <div>Sakit:</div><div className="text-right font-bold">{attendances.filter(a => a.status === 'sick').length} Hari</div>
+                <div>Izin:</div><div className="text-right font-bold">{attendances.filter(a => a.status === 'excused').length} Hari</div>
+                <div className="text-red-650 font-bold">Alfa:</div><div className="text-right font-bold text-red-650">{attendances.filter(a => a.status === 'absent').length} Hari</div>
+              </div>
+            </div>
           </div>
 
-          <div className="max-h-96 overflow-y-auto pr-1 space-y-3">
-            {prayers.length === 0 ? (
-              <p className="text-xs text-slate-400 text-center py-8">Belum ada riwayat laporan shalat.</p>
-            ) : (
-              prayers.map((pr) => {
-                const dateStr = new Date(pr.date).toLocaleDateString('id-ID', {
-                  day: 'numeric',
-                  month: 'short',
-                  year: 'numeric',
-                });
-                return (
-                  <div key={pr.id} className="p-3 bg-slate-50 border border-slate-100 rounded-2xl space-y-2 text-xs">
-                    <div className="flex items-center justify-between font-bold text-slate-800">
-                      <span>{dateStr}</span>
-                      <span className="text-[10px] text-indigo-600">
-                        {
-                          [pr.subuh, pr.dzuhur, pr.ashar, pr.maghrib, pr.isya].filter(Boolean).length
-                        } / 5 Waktu
-                      </span>
-                    </div>
-                    {/* Checkbox status pills */}
-                    <div className="flex flex-wrap gap-1">
-                      <span className={`px-2 py-0.5 rounded-md text-[9px] font-extrabold ${pr.subuh ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-200 text-slate-400'}`}>Subuh</span>
-                      <span className={`px-2 py-0.5 rounded-md text-[9px] font-extrabold ${pr.dzuhur ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-200 text-slate-400'}`}>Dzuhur</span>
-                      <span className={`px-2 py-0.5 rounded-md text-[9px] font-extrabold ${pr.ashar ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-200 text-slate-400'}`}>Ashar</span>
-                      <span className={`px-2 py-0.5 rounded-md text-[9px] font-extrabold ${pr.maghrib ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-200 text-slate-400'}`}>Maghrib</span>
-                      <span className={`px-2 py-0.5 rounded-md text-[9px] font-extrabold ${pr.isya ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-200 text-slate-400'}`}>Isya</span>
-                    </div>
-                    {pr.notes && (
-                      <p className="text-[10px] text-slate-500 font-semibold bg-white p-2 rounded-lg border border-slate-100 leading-normal">
-                        Catatan: {pr.notes}
-                      </p>
-                    )}
+          {/* Right Box: Punishment & Shalat */}
+          <div className="space-y-4">
+            <div className="border border-slate-200 rounded-2xl p-4 space-y-2">
+              <span className="font-bold text-slate-800 uppercase tracking-wide block text-[10px] border-b pb-1.5">REKAPITULASI PELANGGARAN (PUNISHMENT)</span>
+              {activities.filter(a => a.type === 'punishment').length === 0 ? (
+                <p className="text-[11px] text-slate-400 italic">Tidak ada catatan pelanggaran.</p>
+              ) : (
+                <div className="space-y-1.5 font-semibold">
+                  <div className="flex justify-between text-[11px] border-b pb-1 text-slate-500">
+                    <span>Keterangan</span>
+                    <span>Dampak Poin</span>
                   </div>
-                );
-              })
-            )}
+                  {activities.filter(a => a.type === 'punishment').map(act => (
+                    <div key={act.id} className="flex justify-between text-[11px]">
+                      <span className="truncate max-w-[150px]">{act.title}</span>
+                      <span className="text-red-500 font-bold">{act.pointsImpact} Poin</span>
+                    </div>
+                  ))}
+                  <div className="flex justify-between text-xs font-bold pt-1 border-t text-red-650">
+                    <span>Total Pemotongan:</span>
+                    <span>{activities.filter(a => a.type === 'punishment').reduce((sum, a) => sum + a.pointsImpact, 0)} Poin</span>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="border border-slate-200 rounded-2xl p-4 space-y-2">
+              <span className="font-bold text-slate-800 uppercase tracking-wide block text-[10px] border-b pb-1.5">REKAPITULASI SHALAT MANDIRI</span>
+              {prayers.length === 0 ? (
+                <p className="text-[11px] text-slate-400 italic">Belum ada laporan ibadah shalat mandiri.</p>
+              ) : (
+                <div className="grid grid-cols-2 gap-y-1 font-semibold">
+                  <div>Subuh:</div><div className="text-right font-bold">{prayers.filter(p => p.subuh).length} Kali</div>
+                  <div>Dzuhur:</div><div className="text-right font-bold">{prayers.filter(p => p.dzuhur).length} Kali</div>
+                  <div>Ashar:</div><div className="text-right font-bold">{prayers.filter(p => p.ashar).length} Kali</div>
+                  <div>Maghrib:</div><div className="text-right font-bold">{prayers.filter(p => p.maghrib).length} Kali</div>
+                  <div>Isya:</div><div className="text-right font-bold">{prayers.filter(p => p.isya).length} Kali</div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
+
+        {/* Signature Block (Tanda Tangan Wali Kelas & Orang Tua) */}
+        <div className="mt-16 grid grid-cols-2 text-xs font-semibold pt-8 border-t border-slate-100">
+          <div>
+            <p className="mb-16">Mengetahui,<br />Orang Tua / Wali Murid</p>
+            <p className="font-bold border-t border-slate-400 pt-1 w-44 text-slate-900">(............................................)</p>
+          </div>
+          <div className="text-right flex flex-col items-end">
+            <p className="mb-16">{printPlace}, {todayIndoDate}<br />Wali Kelas</p>
+            <p className="font-bold border-t border-slate-400 pt-1 w-44 text-right text-slate-900">( {teacherName} )</p>
+          </div>
+        </div>
+      </div>
       </div>
     </div>
   );

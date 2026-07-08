@@ -36,7 +36,7 @@ export default function TeacherForm() {
           <span>Tambah Guru Kelas Baru</span>
         </h3>
         <p className="text-xs text-slate-400 font-semibold mt-1">
-          Daftarkan akun guru kelas untuk mengelola absensi dan poin keaktifan siswa.
+          Daftarkan akun guru kelas untuk mengelola absensi dan poin keaktifan murid.
         </p>
       </div>
 

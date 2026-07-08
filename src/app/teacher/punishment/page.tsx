@@ -30,7 +30,7 @@ export default async function TeacherPunishmentPage() {
       <div>
         <h2 className="text-2xl font-extrabold text-slate-800 tracking-tight">Pencatatan Punishment & Pelanggaran</h2>
         <p className="text-slate-500 text-sm font-semibold">
-          Catat pelanggaran tata tertib siswa untuk memberikan efek kedisiplinan dan pengurangan poin.
+          Catat pelanggaran tata tertib murid untuk memberikan efek kedisiplinan dan pengurangan poin.
         </p>
       </div>
 
@@ -40,7 +40,7 @@ export default async function TeacherPunishmentPage() {
           <div>
             <h4 className="font-extrabold text-slate-855 text-base">10 Log Pengurangan Poin Terbaru</h4>
             <p className="text-xs text-slate-400 font-semibold mt-1">
-              Catatan pengurangan poin pelanggaran siswa teranyar.
+              Catatan pengurangan poin pelanggaran murid teranyar.
             </p>
           </div>
 

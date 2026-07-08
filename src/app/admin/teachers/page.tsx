@@ -2,6 +2,7 @@ import React from 'react';
 import { prisma } from '@/lib/db';
 import TeacherForm from '@/components/TeacherForm';
 import DeleteTeacherButton from '@/components/DeleteTeacherButton';
+import ResetTeacherDataButton from '@/components/ResetTeacherDataButton';
 import { ShieldCheck } from 'lucide-react';
 
 export const dynamic = 'force-dynamic';
@@ -77,7 +78,8 @@ export default async function AdminTeachersPage() {
                           Guru Aktif
                         </span>
                       </td>
-                      <td className="py-3.5 px-3 text-center flex justify-center">
+                      <td className="py-3.5 px-3 text-center flex justify-center gap-1.5">
+                        <ResetTeacherDataButton id={teacher.id} name={teacher.name} className={teacher.className || ''} />
                         <DeleteTeacherButton id={teacher.id} name={teacher.name} />
                       </td>
                     </tr>

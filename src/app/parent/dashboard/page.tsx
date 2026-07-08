@@ -112,7 +112,7 @@ export default async function ParentDashboardPage() {
       <div className={`grid grid-cols-1 ${childrenData.length > 1 ? 'lg:grid-cols-2' : ''} gap-8`}>
         {childrenData.length === 0 ? (
           <div className="bg-white p-12 rounded-3xl border border-slate-100 shadow-xs text-center text-slate-400 font-bold col-span-2">
-            Akun Anda belum ditautkan dengan siswa manapun. Silakan hubungi Guru Kelas untuk menautkan akun Anda.
+            Akun Anda belum ditautkan dengan murid manapun. Silakan hubungi Guru Kelas untuk menautkan akun Anda.
           </div>
         ) : (
           childrenData.map((data) => {

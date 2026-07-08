@@ -4,7 +4,7 @@ import { getSession } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import { hashPassword } from '@/lib/auth';
 import { revalidatePath } from 'next/cache';
-import { writeFile, mkdir, unlink } from 'fs/promises';
+import { writeFile, mkdir, unlink, readdir } from 'fs/promises';
 import { join } from 'path';
 
 // Helper to generate random string for QR Code Token
@@ -40,7 +40,7 @@ export async function storeStudentAction(prevState: any, formData: FormData) {
     });
 
     if (existingStudent) {
-      return { error: 'NISN Siswa sudah terdaftar.' };
+      return { error: 'NISN Murid sudah terdaftar.' };
     }
 
     // Find or create Parent account using NISN as username and password
@@ -80,22 +80,33 @@ export async function storeStudentAction(prevState: any, formData: FormData) {
       },
     });
 
+    const faceImage = formData.get('face_image') as string | null;
+    if (faceImage && faceImage.startsWith('data:image')) {
+      const base64Data = faceImage.replace(/^data:image\/\w+;base64,/, '');
+      const buffer = Buffer.from(base64Data, 'base64');
+      const uploadDir = join(process.cwd(), 'public', 'faces');
+      await mkdir(uploadDir, { recursive: true });
+      const filePath = join(uploadDir, `${studentId.trim()}.jpg`);
+      await writeFile(filePath, buffer);
+    }
+
     revalidatePath('/teacher/students');
     return {
       success: true,
-      message: `Siswa berhasil ditambahkan. Akun Orang Tua otomatis dibuat dengan Username & Password NISN: ${studentId}`,
+      message: `Murid berhasil ditambahkan. Akun Orang Tua otomatis dibuat dengan Username & Password NISN: ${studentId}`,
     };
   } catch (error: any) {
     console.error('Store student error:', error);
-    return { error: 'Gagal menambahkan siswa. Silakan coba lagi.' };
+    return { error: 'Gagal menambahkan murid. Silakan coba lagi.' };
   }
 }
 
-// 2. Record Attendance (handles both QR Scan and Manual Input)
+// 2. Record Attendance (handles QR Scan, Manual Input, and Face Scan)
 export async function recordAttendanceAction(data: {
   qr_code_token?: string;
   student_id?: string;
   status?: string;
+  isFaceScan?: boolean;
 }) {
   const session = await getSession();
   if (!session || session.role !== 'teacher') {
@@ -107,26 +118,42 @@ export async function recordAttendanceAction(data: {
     let status = 'present';
 
     if (data.student_id) {
-      // Manual Input
+      // Manual Input or Face Scan
       student = await prisma.student.findUnique({
         where: { studentId: data.student_id.trim() },
       });
 
       if (!student) {
-        return { success: false, message: 'NISN Siswa tidak ditemukan.' };
+        return { success: false, message: 'NISN Murid tidak ditemukan.' };
       }
 
-      const inputStatus = data.status ? data.status.toLowerCase() : 'hadir';
-      if (inputStatus === 'hadir' || inputStatus === 'present') {
-        status = 'present';
-      } else if (inputStatus === 'sakit' || inputStatus === 'sick') {
-        status = 'sick';
-      } else if (inputStatus === 'izin' || inputStatus === 'excused') {
-        status = 'excused';
-      } else if (inputStatus === 'alfa' || inputStatus === 'absent') {
-        status = 'absent';
+      if (data.isFaceScan) {
+        // Face Scan auto-status (same time check as QR code, late after 07:30)
+        const d = new Date();
+        const timeParts = new Intl.DateTimeFormat('en-US', {
+          timeZone: 'Asia/Jakarta',
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: false
+        }).formatToParts(d);
+        const timePartMap = Object.fromEntries(timeParts.map(p => [p.type, p.value]));
+        let hourVal = parseInt(timePartMap.hour, 10);
+        if (hourVal === 24) hourVal = 0;
+        const timeStr = `${hourVal.toString().padStart(2, '0')}:${timePartMap.minute}`;
+        status = timeStr > '07:30' ? 'late' : 'present';
       } else {
-        status = 'present';
+        const inputStatus = data.status ? data.status.toLowerCase() : 'hadir';
+        if (inputStatus === 'hadir' || inputStatus === 'present') {
+          status = 'present';
+        } else if (inputStatus === 'sakit' || inputStatus === 'sick') {
+          status = 'sick';
+        } else if (inputStatus === 'izin' || inputStatus === 'excused') {
+          status = 'excused';
+        } else if (inputStatus === 'alfa' || inputStatus === 'absent') {
+          status = 'absent';
+        } else {
+          status = 'present';
+        }
       }
     } else {
       // QR Code Scan
@@ -139,7 +166,7 @@ export async function recordAttendanceAction(data: {
       });
 
       if (!student) {
-        return { success: false, message: 'QR Code Siswa tidak terdaftar.' };
+        return { success: false, message: 'QR Code Murid tidak terdaftar.' };
       }
 
       // Check current time in Asia/Jakarta. If past 07:30, mark as late.
@@ -191,6 +218,29 @@ export async function recordAttendanceAction(data: {
           },
         });
 
+        if (alreadyChecked.status !== status) {
+          // Revert old points
+          let diff = 0;
+          if (alreadyChecked.status === 'present' || alreadyChecked.status === 'late') {
+            diff -= 1;
+          } else if (alreadyChecked.status === 'absent') {
+            diff += 1;
+          }
+          // Add new points
+          if (status === 'present' || status === 'late') {
+            diff += 1;
+          } else if (status === 'absent') {
+            diff -= 1;
+          }
+
+          if (diff !== 0) {
+            await prisma.student.update({
+              where: { id: student.id },
+              data: { totalPoints: { increment: diff } }
+            });
+          }
+        }
+
         let label = 'Hadir';
         if (status === 'sick') label = 'Sakit';
         else if (status === 'excused') label = 'Izin';
@@ -222,6 +272,20 @@ export async function recordAttendanceAction(data: {
         scannedById: session.userId,
       },
     });
+
+    let diff = 0;
+    if (status === 'present' || status === 'late') {
+      diff += 1;
+    } else if (status === 'absent') {
+      diff -= 1;
+    }
+
+    if (diff !== 0) {
+      await prisma.student.update({
+        where: { id: student.id },
+        data: { totalPoints: { increment: diff } }
+      });
+    }
 
     let label = 'Hadir';
     if (status === 'sick') label = 'Sakit';
@@ -264,7 +328,7 @@ export async function storeActivityAction(prevState: any, formData: FormData) {
   try {
     const student = await prisma.student.findUnique({ where: { id: studentId } });
     if (!student) {
-      return { error: 'Siswa tidak ditemukan.' };
+      return { error: 'Murid tidak ditemukan.' };
     }
 
     const pointsImpact = rating; // 1 star = 1 point
@@ -287,7 +351,7 @@ export async function storeActivityAction(prevState: any, formData: FormData) {
     ]);
 
     revalidatePath('/teacher/activity');
-    return { success: true, message: 'Aktivitas keaktifan siswa berhasil ditambahkan.' };
+    return { success: true, message: 'Aktivitas keaktifan murid berhasil ditambahkan.' };
   } catch (error: any) {
     console.error('Store activity error:', error);
     return { error: 'Gagal menambahkan aktivitas. Silakan coba lagi.' };
@@ -319,7 +383,7 @@ export async function storeCreativityAction(prevState: any, formData: FormData) 
   }
 
   if (studentIds.length === 0) {
-    return { error: 'Anda harus memilih setidaknya satu siswa.' };
+    return { error: 'Anda harus memilih setidaknya satu murid.' };
   }
 
   if (!title || !pointsAwarded || !imageFile || imageFile.size === 0) {
@@ -370,7 +434,7 @@ export async function storeCreativityAction(prevState: any, formData: FormData) 
     }
 
     revalidatePath('/teacher/creativity');
-    return { success: true, message: 'Kreativitas siswa berhasil diunggah.' };
+    return { success: true, message: 'Kreativitas murid berhasil diunggah.' };
   } catch (error: any) {
     console.error('Store creativity error:', error);
     return { error: 'Gagal mengunggah kreativitas. Silakan coba lagi.' };
@@ -397,7 +461,7 @@ export async function storePunishmentAction(prevState: any, formData: FormData) 
   try {
     const student = await prisma.student.findUnique({ where: { id: studentId } });
     if (!student) {
-      return { error: 'Siswa tidak ditemukan.' };
+      return { error: 'Murid tidak ditemukan.' };
     }
 
     const pointsImpact = -pointsDeducted;
@@ -484,7 +548,7 @@ export async function destroyCreativityAction(creativityId: number) {
     revalidatePath('/parent/dashboard');
     revalidatePath('/parent/reports');
 
-    return { success: true, message: 'Karya kreativitas berhasil dihapus dan poin siswa disesuaikan.' };
+    return { success: true, message: 'Karya kreativitas berhasil dihapus dan poin murid disesuaikan.' };
   } catch (error: any) {
     console.error('Delete creativity error:', error);
     return { error: 'Gagal menghapus karya kreativitas. Silakan coba lagi.' };
@@ -508,7 +572,7 @@ export async function approveOrRejectAttendanceAction(requestId: number, statusA
     }
 
     if (request.student.className !== session.className) {
-      return { error: 'Akses ditolak. Siswa ini bukan kelas Anda.' };
+      return { error: 'Akses ditolak. Murid ini bukan kelas Anda.' };
     }
 
     if (statusApproval === 'approved') {
@@ -601,7 +665,7 @@ export async function storeCashTransactionAction(prevState: any, formData: FormD
   let studentId: number | null = null;
   if (type === 'income') {
     if (!studentIdStr) {
-      return { error: 'Siswa wajib dipilih untuk jenis transaksi pemasukan.' };
+      return { error: 'Murid wajib dipilih untuk jenis transaksi pemasukan.' };
     }
     if (studentIdStr !== 'other') {
       studentId = parseInt(studentIdStr, 10);
@@ -658,4 +722,96 @@ export async function deleteCashTransactionAction(transactionId: number) {
     return { error: 'Gagal menghapus transaksi kas. Silakan coba lagi.' };
   }
 }
+
+// 7. Register Student Face
+export async function registerStudentFaceAction(studentId: string, imageBase64: string) {
+  const session = await getSession();
+  if (!session || session.role !== 'teacher') {
+    return { error: 'Akses ditolak.' };
+  }
+
+  if (!studentId || !imageBase64) {
+    return { error: 'ID Murid dan data gambar wajib diisi.' };
+  }
+
+  try {
+    const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, '');
+    const buffer = Buffer.from(base64Data, 'base64');
+
+    const uploadDir = join(process.cwd(), 'public', 'faces');
+    await mkdir(uploadDir, { recursive: true });
+
+    const filePath = join(uploadDir, `${studentId.trim()}.jpg`);
+    await writeFile(filePath, buffer);
+
+    revalidatePath('/teacher/dashboard');
+    revalidatePath('/teacher/scan');
+    return { success: true, message: 'Wajah murid berhasil didaftarkan.' };
+  } catch (error: any) {
+    console.error('Register face error:', error);
+    return { error: 'Gagal menyimpan data wajah murid.' };
+  }
+}
+
+// 8. Get List of Students with Registered Faces
+export async function getRegisteredFacesAction() {
+  const session = await getSession();
+  if (!session || session.role !== 'teacher') {
+    return { error: 'Akses ditolak.', studentIds: [] };
+  }
+
+  try {
+    const dirPath = join(process.cwd(), 'public', 'faces');
+    await mkdir(dirPath, { recursive: true }); // Ensure it exists
+    const files = await readdir(dirPath);
+    // Filter only .jpg files and map to student IDs (filename without extension)
+    const studentIds = files
+      .filter((file) => file.endsWith('.jpg'))
+      .map((file) => file.replace('.jpg', ''));
+    return { success: true, studentIds };
+  } catch (error: any) {
+    console.error('Get registered faces error:', error);
+    return { success: false, studentIds: [] };
+  }
+}
+
+// 9. Delete Student
+export async function deleteStudentAction(id: number) {
+  const session = await getSession();
+  if (!session || session.role !== 'teacher') {
+    return { error: 'Akses ditolak.' };
+  }
+
+  try {
+    const student = await prisma.student.findUnique({
+      where: { id },
+    });
+
+    if (!student) {
+      return { error: 'Murid tidak ditemukan.' };
+    }
+
+    // Delete student record (cascade deletes related data in DB due to schema rules)
+    await prisma.student.delete({
+      where: { id },
+    });
+
+    // Try to delete their face biometrics file from disk
+    try {
+      const filePath = join(process.cwd(), 'public', 'faces', `${student.studentId}.jpg`);
+      await unlink(filePath);
+    } catch (err) {
+      // Ignore if file doesn't exist
+    }
+
+    revalidatePath('/teacher/students');
+    revalidatePath('/teacher/dashboard');
+    return { success: true, message: `Murid ${student.name} berhasil dihapus.` };
+  } catch (error: any) {
+    console.error('Delete student error:', error);
+    return { error: 'Gagal menghapus murid. Silakan coba lagi.' };
+  }
+}
+
+
 

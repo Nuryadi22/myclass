@@ -31,7 +31,7 @@ export default function CreativityForm({ students }: CreativityFormProps) {
     setSuccess(null);
 
     if (selectedStudentIds.length === 0) {
-      setError('Anda harus memilih setidaknya satu siswa.');
+      setError('Anda harus memilih setidaknya satu murid.');
       return;
     }
 
@@ -91,7 +91,7 @@ export default function CreativityForm({ students }: CreativityFormProps) {
         {/* Student Checkboxes for Multi-Select */}
         <div>
           <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">
-            Pilih Anggota Siswa (Bisa Pilih Banyak)
+            Pilih Anggota Murid (Bisa Pilih Banyak)
           </label>
           <div className="max-h-36 overflow-y-auto p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
             {students.map((student) => (

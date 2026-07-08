@@ -19,7 +19,9 @@ import {
   X,
   Activity,
   Coins,
-  Calendar
+  Calendar,
+  Camera,
+  RotateCcw
 } from 'lucide-react';
 
 interface UserSession {
@@ -80,6 +82,11 @@ export default function DashboardLayout({ user, children, childName }: Dashboard
           href: '/admin/teachers',
           icon: Users,
         },
+        {
+          name: 'Reset Data',
+          href: '/admin/reset',
+          icon: RotateCcw,
+        },
       ];
     }
 
@@ -91,14 +98,14 @@ export default function DashboardLayout({ user, children, childName }: Dashboard
           icon: LayoutDashboard,
         },
         {
-          name: 'Tambah & Data Siswa',
+          name: 'Tambah & Data Murid',
           href: '/teacher/students',
           icon: Users,
         },
         {
-          name: 'Scan Absensi QR',
+          name: 'Scan Absensi',
           href: '/teacher/scan',
-          icon: QrCode,
+          icon: Camera,
         },
         {
           name: 'Keaktifan (Hafalan, dll)',
@@ -106,7 +113,7 @@ export default function DashboardLayout({ user, children, childName }: Dashboard
           icon: Award,
         },
         {
-          name: 'Kreativitas Siswa',
+          name: 'Kreativitas Murid',
           href: '/teacher/creativity',
           icon: ImageIcon,
         },

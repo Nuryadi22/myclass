@@ -48,7 +48,7 @@ export default function ActivityForm({ students }: ActivityFormProps) {
           <span>Input Aktivitas Keaktifan</span>
         </h3>
         <p className="text-xs text-slate-400 font-semibold mt-1">
-          Catat aktivitas harian siswa (hafalan, literasi, numerasi) untuk menambahkan poin.
+          Catat aktivitas harian murid (hafalan, literasi, numerasi) untuk menambahkan poin.
         </p>
       </div>
 
@@ -76,7 +76,7 @@ export default function ActivityForm({ students }: ActivityFormProps) {
         {/* Student Select */}
         <div>
           <label htmlFor="student_id" className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">
-            Pilih Siswa
+            Pilih Murid
           </label>
           <select
             id="student_id"
@@ -84,7 +84,7 @@ export default function ActivityForm({ students }: ActivityFormProps) {
             required
             className="block w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-800 focus:border-slate-800 focus:bg-white text-xs font-semibold transition-all cursor-pointer"
           >
-            <option value="">-- Pilih Siswa --</option>
+            <option value="">-- Pilih Murid --</option>
             {students.map((student) => (
               <option key={student.id} value={student.id}>
                 {student.name}

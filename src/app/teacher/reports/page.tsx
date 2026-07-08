@@ -23,9 +23,9 @@ export default async function TeacherReportsPage() {
     <div className="space-y-8 animate-fade-in">
       {/* Header */}
       <div>
-        <h2 className="text-2xl font-extrabold text-slate-800 tracking-tight">Laporan Rekapitulasi Siswa</h2>
+        <h2 className="text-2xl font-extrabold text-slate-800 tracking-tight">Laporan Rekapitulasi Murid</h2>
         <p className="text-slate-500 text-sm font-semibold">
-          Analisis peringkat poin keaktifan, total kehadiran kelas, dan portofolio detail per siswa.
+          Analisis peringkat poin keaktifan, total kehadiran kelas, dan portofolio detail per murid.
         </p>
       </div>
 
@@ -34,7 +34,7 @@ export default async function TeacherReportsPage() {
         <div>
           <h4 className="font-extrabold text-slate-855 text-base flex items-center gap-2">
             <FileBarChart2 className="w-5 h-5 text-indigo-600" />
-            <span>Peringkat & Rekapitulasi Keaktifan Siswa</span>
+            <span>Peringkat & Rekapitulasi Keaktifan Murid</span>
           </h4>
           <p className="text-xs text-slate-400 font-semibold mt-1">
             Data rekapitulasi poin akumulatif diurutkan dari yang tertinggi (Leaderboard Kelas).
@@ -46,7 +46,7 @@ export default async function TeacherReportsPage() {
             <thead>
               <tr className="border-b border-slate-100 text-slate-400 text-xs font-bold uppercase tracking-wider">
                 <th className="py-3 px-3">Rank</th>
-                <th className="py-3 px-3">Nama Siswa</th>
+                <th className="py-3 px-3">Nama Murid</th>
                 <th className="py-3 px-3">NISN (Username)</th>
                 <th className="py-3 px-3">Orang Tua</th>
                 <th className="py-3 px-3 text-center">Kehadiran (Hari)</th>
@@ -58,7 +58,7 @@ export default async function TeacherReportsPage() {
               {students.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="py-12 text-center text-slate-400 font-semibold">
-                    Belum ada data siswa terdaftar.
+                    Belum ada data murid terdaftar.
                   </td>
                 </tr>
               ) : (

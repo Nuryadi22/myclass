@@ -45,7 +45,7 @@ export default function PunishmentForm({ students }: PunishmentFormProps) {
           <span>Pencatatan Pelanggaran (Punishment)</span>
         </h3>
         <p className="text-xs text-slate-400 font-semibold mt-1">
-          Catat pelanggaran disiplin siswa. Tindakan ini akan **mengurangi** poin siswa.
+          Catat pelanggaran disiplin murid. Tindakan ini akan **mengurangi** poin murid.
         </p>
       </div>
 
@@ -73,7 +73,7 @@ export default function PunishmentForm({ students }: PunishmentFormProps) {
         {/* Student Select */}
         <div>
           <label htmlFor="student_id" className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">
-            Pilih Siswa
+            Pilih Murid
           </label>
           <select
             id="student_id"
@@ -81,7 +81,7 @@ export default function PunishmentForm({ students }: PunishmentFormProps) {
             required
             className="block w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-500 focus:bg-white text-xs font-semibold transition-all cursor-pointer"
           >
-            <option value="">-- Pilih Siswa --</option>
+            <option value="">-- Pilih Murid --</option>
             {students.map((student) => (
               <option key={student.id} value={student.id}>
                 {student.name}
@@ -93,7 +93,7 @@ export default function PunishmentForm({ students }: PunishmentFormProps) {
         {/* Violation Reason / Title */}
         <div>
           <label htmlFor="title" className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">
-            Detail Pelanggaran / Alasan Hukuman
+            Jenis / Deskripsi Pelanggaran
           </label>
           <input
             id="title"
@@ -101,7 +101,7 @@ export default function PunishmentForm({ students }: PunishmentFormProps) {
             type="text"
             required
             className="block w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-500 focus:bg-white text-xs font-semibold transition-all"
-            placeholder="Misal: Terlambat masuk kelas / Ribut di kelas"
+            placeholder="Contoh: Terlambat masuk kelas"
           />
         </div>
 
@@ -120,7 +120,7 @@ export default function PunishmentForm({ students }: PunishmentFormProps) {
             placeholder="Masukkan angka pengurangan, misal: 5"
           />
           <span className="text-[10px] text-red-500 font-bold block mt-1">
-            *Poin siswa akan dikurangi sebesar angka ini (tidak akan kurang dari 0).
+            *Poin murid akan dikurangi sebesar angka ini (tidak akan kurang dari 0).
           </span>
         </div>
 

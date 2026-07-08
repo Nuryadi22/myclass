@@ -25,7 +25,7 @@ export default async function TeacherCreativityPage() {
     <div className="space-y-8 animate-fade-in">
       {/* Header */}
       <div>
-        <h2 className="text-2xl font-extrabold text-slate-800 tracking-tight">Portofolio & Kreativitas Siswa</h2>
+        <h2 className="text-2xl font-extrabold text-slate-800 tracking-tight">Portofolio & Kreativitas Murid</h2>
         <p className="text-slate-500 text-sm font-semibold">
           Unggah portofolio karya seni, kerajinan tangan, atau kreativitas anak kelas binaan Anda.
         </p>
@@ -35,9 +35,9 @@ export default async function TeacherCreativityPage() {
         {/* Uploaded Portfolios Gallery */}
         <div className="lg:col-span-2 bg-white rounded-3xl border border-slate-100 p-6 space-y-6 shadow-xs">
           <div>
-            <h4 className="font-extrabold text-slate-855 text-base">Portofolio Karya Seni Siswa</h4>
+            <h4 className="font-extrabold text-slate-855 text-base">Portofolio Karya Seni Murid</h4>
             <p className="text-xs text-slate-400 font-semibold mt-1">
-              Galeri dokumentasi fisik karya kreativitas siswa kelas binaan Anda.
+              Galeri dokumentasi fisik karya kreativitas murid kelas binaan Anda.
             </p>
           </div>
 
@@ -73,7 +73,7 @@ export default async function TeacherCreativityPage() {
                     <div className="p-4 space-y-2">
                       <div className="space-y-0.5">
                         <span className="text-[10px] text-indigo-600 font-bold uppercase tracking-wider block">
-                          Siswa: {cr.student.name}
+                          Murid: {cr.student.name}
                         </span>
                         <h5 className="font-extrabold text-slate-850 text-sm">{cr.title}</h5>
                       </div>

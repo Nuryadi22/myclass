@@ -2,6 +2,9 @@ import React from 'react';
 import { prisma } from '@/lib/db';
 import StudentForm from '@/components/StudentForm';
 import { QrCode, User } from 'lucide-react';
+import { getRegisteredFacesAction } from '@/app/actions/teacher';
+import BiometricEnrollButton from '@/components/BiometricEnrollButton';
+import DeleteStudentButton from '@/components/DeleteStudentButton';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,13 +19,16 @@ export default async function TeacherStudentsPage() {
     orderBy: { name: 'asc' },
   });
 
+  const facesRes = await getRegisteredFacesAction();
+  const registeredIds = facesRes.success ? facesRes.studentIds || [] : [];
+
   return (
     <div className="space-y-8 animate-fade-in">
       {/* Header */}
       <div>
-        <h2 className="text-2xl font-extrabold text-slate-800 tracking-tight">Manajemen & Data Siswa</h2>
+        <h2 className="text-2xl font-extrabold text-slate-800 tracking-tight">Manajemen & Data Murid</h2>
         <p className="text-slate-500 text-sm font-semibold">
-          Daftarkan siswa baru dan unduh/cetak kartu absensi QR Code siswa.
+          Daftarkan murid baru dan unduh/cetak kartu absensi QR Code murid.
         </p>
       </div>
 
@@ -30,9 +36,9 @@ export default async function TeacherStudentsPage() {
         {/* Students List */}
         <div className="lg:col-span-2 bg-white rounded-3xl border border-slate-100 p-6 space-y-6 shadow-xs">
           <div>
-            <h4 className="font-extrabold text-slate-850 text-base">Daftar Siswa Kelas Binaan</h4>
+            <h4 className="font-extrabold text-slate-855 text-slate-850 text-base">Daftar Murid Kelas Binaan</h4>
             <p className="text-xs text-slate-400 font-semibold mt-1">
-              List data siswa aktif berserta informasi akun wali murid.
+              List data murid aktif berserta informasi akun wali murid.
             </p>
           </div>
 
@@ -41,17 +47,19 @@ export default async function TeacherStudentsPage() {
               <thead>
                 <tr className="border-b border-slate-100 text-slate-400 text-xs font-bold uppercase tracking-wider">
                   <th className="py-3 px-3">No</th>
-                  <th className="py-3 px-3">Nama Siswa</th>
+                  <th className="py-3 px-3">Nama Murid</th>
                   <th className="py-3 px-3">NISN (Username)</th>
                   <th className="py-3 px-3">Nama Orang Tua</th>
+                  <th className="py-3 px-3 text-center">Biometrik Wajah</th>
                   <th className="py-3 px-3 text-center">QR Code</th>
+                  <th className="py-3 px-3 text-center">Aksi</th>
                 </tr>
               </thead>
               <tbody className="font-semibold text-slate-755">
                 {students.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="py-12 text-center text-slate-400 font-semibold">
-                      Belum ada data siswa terdaftar.
+                    <td colSpan={7} className="py-12 text-center text-slate-400 font-semibold">
+                      Belum ada data murid terdaftar.
                     </td>
                   </tr>
                 ) : (
@@ -70,6 +78,13 @@ export default async function TeacherStudentsPage() {
                           <span className="text-[9px] text-slate-400 font-bold">Username: {student.parent?.username || '-'}</span>
                         </td>
                         <td className="py-3.5 px-3 text-center">
+                          <BiometricEnrollButton
+                            studentId={student.studentId}
+                            studentName={student.name}
+                            isRegistered={registeredIds.includes(student.studentId)}
+                          />
+                        </td>
+                        <td className="py-3.5 px-3 text-center">
                           {/* Interactive/printable QR Card wrapper */}
                           <div className="flex flex-col items-center justify-center gap-1 group/qr">
                             <a
@@ -85,6 +100,9 @@ export default async function TeacherStudentsPage() {
                               {student.qrCodeToken}
                             </span>
                           </div>
+                        </td>
+                        <td className="py-3.5 px-3 text-center">
+                          <DeleteStudentButton studentId={student.id} studentName={student.name} />
                         </td>
                       </tr>
                     );

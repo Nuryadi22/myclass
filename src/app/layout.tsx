@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "MyClass - Aplikasi Monitoring Kelas & Keaktifan Siswa",
+  title: "MyClass - Aplikasi Monitoring Kelas & Keaktifan Murid",
   description: "Pantau kehadiran harian, poin keaktifan, karya kreativitas, dan ibadah mandiri anak secara real-time.",
 };
 

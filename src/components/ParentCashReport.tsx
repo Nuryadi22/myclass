@@ -164,8 +164,8 @@ export default function ParentCashReport({
         className: activeClassName,
         type: 'income',
         studentId: null,
-        studentName: 'Siswa',
-        description: 'Kalkulasi Siswa',
+        studentName: 'Murid',
+        description: 'Kalkulasi Murid',
         amount: amount,
         date: date,
       };
@@ -256,7 +256,7 @@ export default function ParentCashReport({
   if (students.length === 0) {
     return (
       <div className="bg-white p-12 rounded-3xl border border-slate-100 shadow-xs text-center text-slate-400 font-bold">
-        Akun Anda belum ditautkan dengan data siswa manapun.
+        Akun Anda belum ditautkan dengan data murid manapun.
       </div>
     );
   }
@@ -319,7 +319,7 @@ export default function ParentCashReport({
                 <h3 className="text-lg font-extrabold text-emerald-600">
                   Rp {totalIncome.toLocaleString('id-ID')}
                 </h3>
-                <span className="text-[9px] text-slate-400 font-semibold block">Dari iuran siswa dll</span>
+                <span className="text-[9px] text-slate-400 font-semibold block">Dari iuran murid dll</span>
               </div>
               <div className="w-10 h-10 rounded-xl bg-slate-50 text-emerald-650 flex items-center justify-center">
                 <Banknote className="w-5 h-5" />

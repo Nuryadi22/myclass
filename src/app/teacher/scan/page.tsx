@@ -1,11 +1,11 @@
 import React from 'react';
 import { prisma } from '@/lib/db';
-import AttendanceScanner from '@/components/AttendanceScanner';
+import FaceScanner from '@/components/FaceScanner';
 
 export const dynamic = 'force-dynamic';
 
 export default async function TeacherScanPage() {
-  // Fetch students for manual entry dropdown list
+  // Fetch students
   const students = await prisma.student.findMany({
     select: {
       id: true,
@@ -19,13 +19,13 @@ export default async function TeacherScanPage() {
     <div className="space-y-8 animate-fade-in">
       {/* Header */}
       <div>
-        <h2 className="text-2xl font-extrabold text-slate-800 tracking-tight">Pencatatan Kehadiran Siswa</h2>
+        <h2 className="text-2xl font-extrabold text-slate-800 tracking-tight">Pemindaian Wajah & Biometrik</h2>
         <p className="text-slate-500 text-sm font-semibold">
-          Lakukan pemindaian kartu absensi QR Code siswa atau isi kehadiran manual.
+          Lakukan pemindaian wajah murid untuk kehadiran otomatis atau daftarkan wajah baru.
         </p>
       </div>
 
-      <AttendanceScanner students={students} />
+      <FaceScanner students={students} />
     </div>
   );
 }
