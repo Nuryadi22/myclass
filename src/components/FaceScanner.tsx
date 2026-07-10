@@ -733,8 +733,27 @@ export default function FaceScanner({ students }: FaceScannerProps) {
             <h3 className="font-extrabold text-slate-850 text-base">Absensi Scan QR Code</h3>
             <p className="text-xs text-slate-400 font-semibold mt-1">Arahkan kartu QR Code murid ke kamera.</p>
           </div>
-          <div className="w-full aspect-square bg-slate-900 rounded-2xl overflow-hidden shadow-lg border border-slate-100 relative">
+          <div className="w-full aspect-square bg-slate-900 rounded-2xl overflow-hidden shadow-lg border border-slate-100 relative group">
             <div id="qr-reader" className="w-full h-full" />
+            
+            {/* CSS Premium Scanning Animation Overlay */}
+            <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center">
+              {/* Semi-transparent Dark Background */}
+              <div className="absolute inset-0 bg-slate-950/40" />
+              
+              {/* Scanner box area */}
+              <div className="relative w-2/3 h-2/3 border border-indigo-500/30 rounded-2xl overflow-hidden bg-transparent shadow-[0_0_15px_rgba(99,102,241,0.15)] flex items-center justify-center">
+                {/* Glowing scanning laser line */}
+                <div className="absolute w-full h-[3px] bg-gradient-to-r from-transparent via-emerald-400 to-transparent shadow-[0_0_10px_#34d399] left-0 animate-[scan_2.5s_ease-in-out_infinite]" />
+                
+                {/* Corner Bracket decorations */}
+                <div className="absolute top-3 left-3 w-4 h-4 border-t-2 border-l-2 border-indigo-400 rounded-tl-md" />
+                <div className="absolute top-3 right-3 w-4 h-4 border-t-2 border-r-2 border-indigo-400 rounded-tr-md" />
+                <div className="absolute bottom-3 left-3 w-4 h-4 border-b-2 border-l-2 border-indigo-400 rounded-bl-md" />
+                <div className="absolute bottom-3 right-3 w-4 h-4 border-b-2 border-r-2 border-indigo-400 rounded-br-md" />
+              </div>
+            </div>
+
             <style dangerouslySetInnerHTML={{__html: `
               #qr-reader {
                 border: none !important;
@@ -743,6 +762,11 @@ export default function FaceScanner({ students }: FaceScannerProps) {
                 width: 100% !important;
                 height: 100% !important;
                 object-fit: cover !important;
+              }
+              @keyframes scan {
+                0% { top: 10%; }
+                50% { top: 90%; }
+                100% { top: 10%; }
               }
             `}} />
             {isPending && (

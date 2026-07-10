@@ -26,7 +26,7 @@ export default async function ParentCashPage() {
 
   // Fetch all transactions for the classes of the parent's children
   const transactions = classNames.length > 0
-    ? await prisma.classCash.findMany({
+    ? await (prisma as any).classCash.findMany({
         where: {
           className: { in: classNames },
         },
@@ -44,7 +44,7 @@ export default async function ParentCashPage() {
     : [];
 
   // Map database transactions to the expected component format
-  const mappedTransactions = transactions.map((t) => ({
+  const mappedTransactions = transactions.map((t: any) => ({
     id: t.id,
     className: t.className,
     type: t.type,
@@ -53,21 +53,35 @@ export default async function ParentCashPage() {
     description: t.description,
     amount: t.amount,
     date: t.date,
+    photoPath: t.photoPath || null,
   }));
+
+  // Fetch bills for parent classes
+  const bills = classNames.length > 0
+    ? await (prisma as any).classBill.findMany({
+        where: {
+          className: { in: classNames },
+        },
+        orderBy: {
+          createdAt: 'asc',
+        },
+      })
+    : [];
 
   return (
     <div className="space-y-8 animate-fade-in">
       {/* Header Section */}
       <div>
-        <h2 className="text-2xl font-extrabold text-slate-800 tracking-tight">Laporan Kas Kelas</h2>
+        <h2 className="text-2xl font-extrabold text-slate-800 tracking-tight">Keuangan Kelas</h2>
         <p className="text-slate-500 text-sm font-semibold">
-          Transparansi pembukuan kas kelas anak Anda. Lihat laporan pemasukan, pengeluaran, dan sisa saldo.
+          Transparansi pembukuan keuangan kelas anak Anda. Lihat laporan pemasukan, pengeluaran, sisa saldo, dan tagihan wajib.
         </p>
       </div>
 
       {/* Cash Report Component */}
       <ParentCashReport
         students={children}
+        bills={bills.map((b: any) => ({ id: b.id, className: b.className, title: b.title, amount: b.amount }))}
         initialTransactions={mappedTransactions}
       />
     </div>

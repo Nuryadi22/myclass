@@ -129,7 +129,7 @@ export default function DashboardLayout({ user, children, childName }: Dashboard
           matchPrefix: '/teacher/reports',
         },
         {
-          name: 'Kas Kelas',
+          name: 'Keuangan Kelas',
           href: '/teacher/cash',
           icon: Coins,
         },
@@ -159,7 +159,7 @@ export default function DashboardLayout({ user, children, childName }: Dashboard
         icon: ClipboardCheck,
       },
       {
-        name: 'Laporan Kas',
+        name: 'Keuangan Kelas',
         href: '/parent/cash',
         icon: Coins,
       },

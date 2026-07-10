@@ -29,7 +29,7 @@ export default async function TeacherCashPage() {
   });
 
   // Fetch cash book transactions
-  const transactions = await prisma.classCash.findMany({
+  const transactions = await (prisma as any).classCash.findMany({
     where: { className },
     include: {
       student: {
@@ -44,20 +44,27 @@ export default async function TeacherCashPage() {
     ],
   });
 
+  // Fetch class bills
+  const bills = await (prisma as any).classBill.findMany({
+    where: { className },
+    orderBy: { createdAt: 'desc' },
+  });
+
   return (
     <div className="space-y-8 animate-fade-in">
       {/* Header */}
       <div>
-        <h2 className="text-2xl font-extrabold text-slate-800 tracking-tight">Kas Kelas ({className})</h2>
+        <h2 className="text-2xl font-extrabold text-slate-800 tracking-tight">Keuangan Kelas ({className})</h2>
         <p className="text-slate-500 text-sm font-semibold">
-          Kelola pembukuan keuangan kelas binaan Anda, pantau pengeluaran dan pemasukan, serta cetak laporannya.
+          Kelola pembukuan keuangan kelas binaan Anda, pantau pengeluaran dan pemasukan, atur tagihan siswa, serta cetak laporannya.
         </p>
       </div>
 
       <ClassCashManager
         className={className}
         students={students.map((s) => ({ id: s.id, name: s.name, studentId: s.studentId }))}
-        initialTransactions={transactions.map((t) => ({
+        bills={bills.map((b: any) => ({ id: b.id, title: b.title, amount: b.amount }))}
+        initialTransactions={transactions.map((t: any) => ({
           id: t.id,
           className: t.className,
           type: t.type,
@@ -66,6 +73,7 @@ export default async function TeacherCashPage() {
           description: t.description,
           amount: t.amount,
           date: t.date,
+          photoPath: t.photoPath || null,
         }))}
       />
     </div>

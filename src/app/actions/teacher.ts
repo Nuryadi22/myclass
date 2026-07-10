@@ -128,19 +128,8 @@ export async function recordAttendanceAction(data: {
       }
 
       if (data.isFaceScan) {
-        // Face Scan auto-status (same time check as QR code, late after 07:30)
-        const d = new Date();
-        const timeParts = new Intl.DateTimeFormat('en-US', {
-          timeZone: 'Asia/Jakarta',
-          hour: '2-digit',
-          minute: '2-digit',
-          hour12: false
-        }).formatToParts(d);
-        const timePartMap = Object.fromEntries(timeParts.map(p => [p.type, p.value]));
-        let hourVal = parseInt(timePartMap.hour, 10);
-        if (hourVal === 24) hourVal = 0;
-        const timeStr = `${hourVal.toString().padStart(2, '0')}:${timePartMap.minute}`;
-        status = timeStr > '07:30' ? 'late' : 'present';
+        // Face Scan auto-status (no late check)
+        status = 'present';
       } else {
         const inputStatus = data.status ? data.status.toLowerCase() : 'hadir';
         if (inputStatus === 'hadir' || inputStatus === 'present') {
@@ -169,19 +158,8 @@ export async function recordAttendanceAction(data: {
         return { success: false, message: 'QR Code Murid tidak terdaftar.' };
       }
 
-      // Check current time in Asia/Jakarta. If past 07:30, mark as late.
-      const d = new Date();
-      const timeParts = new Intl.DateTimeFormat('en-US', {
-        timeZone: 'Asia/Jakarta',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false
-      }).formatToParts(d);
-      const timePartMap = Object.fromEntries(timeParts.map(p => [p.type, p.value]));
-      let hourVal = parseInt(timePartMap.hour, 10);
-      if (hourVal === 24) hourVal = 0;
-      const timeStr = `${hourVal.toString().padStart(2, '0')}:${timePartMap.minute}`;
-      status = timeStr > '07:30' ? 'late' : 'present';
+      // No late check, always present
+      status = 'present';
     }
 
     const todayStr = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Jakarta' }).format(new Date()); // YYYY-MM-DD in WIB
@@ -673,6 +651,33 @@ export async function storeCashTransactionAction(prevState: any, formData: FormD
   }
 
   try {
+    let photoPath: string | null = null;
+
+    if (type === 'expense') {
+      const photoFile = formData.get('photo_file') as File | null;
+      const photoBase64 = formData.get('photo_base64') as string | null;
+
+      if (photoFile && photoFile.size > 0) {
+        const bytes = await photoFile.arrayBuffer();
+        const buffer = Buffer.from(bytes);
+        const filename = `${Date.now()}_${photoFile.name.replace(/\s+/g, '_')}`;
+        const uploadDir = join(process.cwd(), 'public', 'expenses');
+        await mkdir(uploadDir, { recursive: true });
+        const filePath = join(uploadDir, filename);
+        await writeFile(filePath, buffer);
+        photoPath = `expenses/${filename}`;
+      } else if (photoBase64 && photoBase64.startsWith('data:image')) {
+        const base64Data = photoBase64.replace(/^data:image\/\w+;base64,/, '');
+        const buffer = Buffer.from(base64Data, 'base64');
+        const filename = `expense_${Date.now()}.jpg`;
+        const uploadDir = join(process.cwd(), 'public', 'expenses');
+        await mkdir(uploadDir, { recursive: true });
+        const filePath = join(uploadDir, filename);
+        await writeFile(filePath, buffer);
+        photoPath = `expenses/${filename}`;
+      }
+    }
+
     await prisma.classCash.create({
       data: {
         className,
@@ -680,8 +685,9 @@ export async function storeCashTransactionAction(prevState: any, formData: FormD
         amount,
         date,
         description: description.trim(),
-        studentId
-      }
+        studentId,
+        photoPath
+      } as any
     });
 
     revalidatePath('/teacher/cash');
@@ -699,7 +705,7 @@ export async function deleteCashTransactionAction(transactionId: number) {
   }
 
   try {
-    const transaction = await prisma.classCash.findUnique({
+    const transaction = await (prisma as any).classCash.findUnique({
       where: { id: transactionId }
     });
 
@@ -711,7 +717,16 @@ export async function deleteCashTransactionAction(transactionId: number) {
       return { error: 'Akses ditolak. Transaksi ini bukan milik kelas Anda.' };
     }
 
-    await prisma.classCash.delete({
+    if (transaction.photoPath) {
+      try {
+        const filePath = join(process.cwd(), 'public', transaction.photoPath);
+        await unlink(filePath);
+      } catch (err) {
+        console.warn('Could not delete expense receipt file on disk:', err);
+      }
+    }
+
+    await (prisma as any).classCash.delete({
       where: { id: transactionId }
     });
 
@@ -810,6 +825,124 @@ export async function deleteStudentAction(id: number) {
   } catch (error: any) {
     console.error('Delete student error:', error);
     return { error: 'Gagal menghapus murid. Silakan coba lagi.' };
+  }
+}
+
+// Action to award 1 active point to a student via QR scan in Keaktifan (Poinku)
+export async function awardActivePointAction(qrCodeToken: string) {
+  const session = await getSession();
+  if (!session || session.role !== 'teacher') {
+    return { success: false, message: 'Akses ditolak.' };
+  }
+
+  try {
+    const student = await prisma.student.findUnique({
+      where: { qrCodeToken: qrCodeToken.trim() }
+    });
+
+    if (!student) {
+      return { success: false, message: 'QR Code Murid tidak terdaftar.' };
+    }
+
+    const pointsImpact = 1;
+    await prisma.$transaction([
+      prisma.activity.create({
+        data: {
+          studentId: student.id,
+          teacherId: session.userId,
+          type: 'memorization', // Defaulting to memorization/activity log type
+          title: 'Aktivitas Poinku (Scan QR)',
+          rating: 1,
+          pointsImpact: pointsImpact,
+        },
+      }),
+      prisma.student.update({
+        where: { id: student.id },
+        data: { totalPoints: { increment: pointsImpact } },
+      }),
+    ]);
+
+    revalidatePath('/teacher/activity');
+    revalidatePath('/teacher/dashboard');
+    return { success: true, message: `Berhasil menambahkan 1 Poin Bintang untuk ${student.name}.`, studentName: student.name };
+  } catch (error: any) {
+    console.error('Award active point error:', error);
+    return { success: false, message: 'Gagal menambahkan poin. Terjadi kesalahan sistem.' };
+  }
+}
+
+// Action to store a class bill
+export async function storeClassBillAction(prevState: any, formData: FormData) {
+  const session = await getSession();
+  if (!session || session.role !== 'teacher') {
+    return { error: 'Akses ditolak.' };
+  }
+
+  const className = session.className;
+  if (!className) {
+    return { error: 'Anda belum terdaftar di kelas manapun.' };
+  }
+
+  const title = formData.get('title') as string;
+  const amountStr = formData.get('amount') as string;
+  const amount = parseFloat(amountStr);
+
+  if (!title || isNaN(amount) || amount <= 0) {
+    return { error: 'Judul/Kategori dan Jumlah Tagihan wajib diisi dengan benar.' };
+  }
+
+  try {
+    await (prisma as any).classBill.create({
+      data: {
+        className,
+        title,
+        amount
+      }
+    });
+
+    revalidatePath('/teacher/cash');
+    revalidatePath('/teacher/dashboard');
+    revalidatePath('/parent/dashboard');
+    revalidatePath('/parent/cash');
+    return { success: true, message: 'Tagihan kelas berhasil ditambahkan.' };
+  } catch (error: any) {
+    console.error('Store class bill error:', error);
+    return { error: 'Gagal menambahkan tagihan. Silakan coba lagi.' };
+  }
+}
+
+// Action to delete a class bill
+export async function deleteClassBillAction(billId: number) {
+  const session = await getSession();
+  if (!session || session.role !== 'teacher') {
+    return { error: 'Akses ditolak.' };
+  }
+
+  try {
+    const bill = await (prisma as any).classBill.findUnique({
+      where: { id: billId }
+    });
+
+    if (!bill) {
+      return { error: 'Tagihan tidak ditemukan.' };
+    }
+
+    if (bill.className !== session.className) {
+      return { error: 'Akses ditolak. Tagihan ini bukan milik kelas Anda.' };
+    }
+
+    await (prisma as any).classBill.delete({
+      where: { id: billId }
+    });
+
+    revalidatePath('/teacher/cash');
+    revalidatePath('/teacher/dashboard');
+    revalidatePath('/parent/dashboard');
+    revalidatePath('/parent/cash');
+    return { success: true, message: 'Tagihan kelas berhasil dihapus.' };
+  } catch (error: any) {
+    console.error('Delete class bill error:', error);
+    return { error: 'Gagal menghapus tagihan. Silakan coba lagi.' };
   }
 }
 

@@ -2,7 +2,7 @@ import React from 'react';
 import { getSession } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import { cookies } from 'next/headers';
-import { Calendar, User, Star, ClipboardCheck } from 'lucide-react';
+import { Calendar, User, Star, ClipboardCheck, CheckCircle2, AlertCircle } from 'lucide-react';
 import ChildProgressChart from '@/components/ChildProgressChart';
 import ClassCashPieChart from '@/components/ClassCashPieChart';
 import AttendanceNotificationModal from '@/components/AttendanceNotificationModal';
@@ -60,18 +60,48 @@ export default async function ParentDashboardPage() {
 
     // 6. Fetch class cash transactions to calculate totals
     const classCashTransactions = child.className
-      ? await prisma.classCash.findMany({
+      ? await (prisma as any).classCash.findMany({
           where: { className: child.className },
         })
       : [];
 
     const totalIncome = classCashTransactions
-      .filter((t) => t.type === 'income')
-      .reduce((sum, t) => sum + t.amount, 0);
+      .filter((t: any) => t.type === 'income')
+      .reduce((sum: number, t: any) => sum + t.amount, 0);
 
     const totalExpense = classCashTransactions
-      .filter((t) => t.type === 'expense')
-      .reduce((sum, t) => sum + t.amount, 0);
+      .filter((t: any) => t.type === 'expense')
+      .reduce((sum: number, t: any) => sum + t.amount, 0);
+
+    // 7. Calculate unpaid bills for the student
+    const childBills = child.className
+      ? await (prisma as any).classBill.findMany({
+          where: { className: child.className },
+          orderBy: { createdAt: 'asc' },
+        })
+      : [];
+
+    const childPayments = await (prisma as any).classCash.findMany({
+      where: {
+        studentId: child.id,
+        type: 'income',
+      },
+    });
+
+    const billsBreakdown = childBills.map((bill: any) => {
+      const paid = childPayments
+        .filter((p: any) => p.description.trim().toLowerCase() === bill.title.trim().toLowerCase())
+        .reduce((sum: number, p: any) => sum + p.amount, 0);
+      const remaining = Math.max(0, bill.amount - paid);
+      return {
+        title: bill.title,
+        amount: bill.amount,
+        paid,
+        remaining,
+      };
+    });
+
+    const totalUnpaidBills = billsBreakdown.reduce((sum: number, b: any) => sum + b.remaining, 0);
 
     childrenData.push({
       student: child,
@@ -80,6 +110,8 @@ export default async function ParentDashboardPage() {
       recent_creativities: recentCreativities,
       totalIncome,
       totalExpense,
+      billsBreakdown,
+      totalUnpaidBills,
       ...dailyProgression,
       ...weeklyProgression,
     });
@@ -128,14 +160,14 @@ export default async function ParentDashboardPage() {
             if (att) {
               if (att.status === 'present') {
                 statusBg = 'bg-emerald-50 border-emerald-100/50 text-emerald-800';
-                statusText = 'Hadir Tepat Waktu';
+                statusText = 'Hadir';
                 statusTimeStr = `Jam: ${att.time.substring(0, 5)} WIB`;
                 statusIcon = '✓';
               } else if (att.status === 'late') {
                 statusBg = 'bg-amber-50 border-amber-100/50 text-amber-800';
-                statusText = 'Terlambat Datang';
+                statusText = 'Hadir'; // 'tidak terpaku pada jam masuk nya jadi tidak ada kata terlambat'
                 statusTimeStr = `Jam: ${att.time.substring(0, 5)} WIB`;
-                statusIcon = '⏰';
+                statusIcon = '✓';
               } else if (att.status === 'sick') {
                 statusBg = 'bg-blue-50 border-blue-100/50 text-blue-800';
                 statusText = 'Sakit';
@@ -203,6 +235,45 @@ export default async function ParentDashboardPage() {
                         {statusIcon}
                       </div>
                     </div>
+                  </div>
+
+                  {/* Tagihan / Dues Panel */}
+                  <div className="bg-slate-50 border border-slate-150 rounded-2xl p-5 space-y-3.5 shadow-3xs select-none">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Tagihan Yang Harus Dibayarkan</span>
+                      {data.totalUnpaidBills === 0 ? (
+                        <span className="px-2 py-0.5 bg-emerald-50 text-emerald-800 border border-emerald-100 text-[9px] font-extrabold rounded-full flex items-center gap-0.5">
+                          ✓ Lunas Semua
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 bg-red-50 text-red-850 border border-red-100 text-[9px] font-extrabold rounded-full flex items-center gap-0.5">
+                          Belum Lunas
+                        </span>
+                      )}
+                    </div>
+                    
+                    {data.billsBreakdown.length === 0 ? (
+                      <p className="text-[11px] text-slate-400 font-semibold italic text-center py-2">Tidak ada tagihan yang terdaftar.</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {data.billsBreakdown.map((b: any, idx: number) => (
+                          <div key={idx} className="flex justify-between items-center text-xs font-semibold">
+                            <span className="text-slate-600">{b.title}</span>
+                            {b.remaining === 0 ? (
+                              <span className="text-emerald-600 font-bold">Lunas</span>
+                            ) : (
+                              <span className="text-red-500 font-extrabold">Sisa: Rp {b.remaining.toLocaleString('id-ID')}</span>
+                            )}
+                          </div>
+                        ))}
+                        {data.totalUnpaidBills > 0 && (
+                          <div className="flex justify-between items-center text-xs font-black border-t border-slate-200 pt-2 mt-2 text-indigo-950">
+                            <span>Total Sisa Tagihan:</span>
+                            <span>Rp {data.totalUnpaidBills.toLocaleString('id-ID')}</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   {/* Charts Grid */}

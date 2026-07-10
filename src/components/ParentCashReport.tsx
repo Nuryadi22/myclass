@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import Chart from 'chart.js/auto';
-import { Printer, Calendar, Banknote, Receipt, Wallet } from 'lucide-react';
+import { Printer, Banknote, Receipt, Wallet, CheckCircle, AlertCircle, ImageIcon } from 'lucide-react';
 
 interface Student {
   id: number;
@@ -19,15 +19,25 @@ interface Transaction {
   description: string;
   amount: number;
   date: string; // YYYY-MM-DD
+  photoPath?: string | null;
+}
+
+interface ClassBill {
+  id: number;
+  className: string;
+  title: string;
+  amount: number;
 }
 
 interface ParentCashReportProps {
   students: Student[];
+  bills: ClassBill[];
   initialTransactions: Transaction[];
 }
 
 export default function ParentCashReport({
   students,
+  bills,
   initialTransactions,
 }: ParentCashReportProps) {
   // Select active student/class
@@ -35,13 +45,15 @@ export default function ParentCashReport({
     students.length > 0 ? students[0].id.toString() : ''
   );
   
-  const [filterType, setFilterType] = useState<'all' | 'week' | 'month'>('all');
-  const [selectedMonth, setSelectedMonth] = useState<string>('');
+  const [printFilterType, setPrintFilterType] = useState<'all' | 'income' | 'expense' | 'date_range' | 'month'>('all');
+  const [printStartDate, setPrintStartDate] = useState<string>('');
+  const [printEndDate, setPrintEndDate] = useState<string>('');
+  const [printMonth, setPrintMonth] = useState<string>('');
 
-  // Set default selected month to current month on mount or class switch
+  // Set default selected month to current month on student switch
   useEffect(() => {
     const today = new Date();
-    setSelectedMonth(today.toISOString().substring(0, 7));
+    setPrintMonth(today.toISOString().substring(0, 7));
   }, [selectedStudentId]);
 
   const chartRef = useRef<HTMLCanvasElement>(null);
@@ -59,11 +71,8 @@ export default function ParentCashReport({
   // Get all unique YYYY-MM months from transactions, sorted descending
   const getAvailableMonths = () => {
     const monthsSet = new Set<string>();
-    
-    // Always include current month
     const today = new Date();
-    const currentMonthStr = today.toISOString().substring(0, 7);
-    monthsSet.add(currentMonthStr);
+    monthsSet.add(today.toISOString().substring(0, 7));
     
     classTransactions.forEach((t) => {
       if (t.date && t.date.length >= 7) {
@@ -81,8 +90,7 @@ export default function ParentCashReport({
       'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
       'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
     ];
-    const monthIndex = parseInt(month, 10) - 1;
-    return `${monthNames[monthIndex]} ${year}`;
+    return `${monthNames[parseInt(month, 10) - 1]} ${year}`;
   };
 
   // Financial calculations for active class
@@ -90,7 +98,6 @@ export default function ParentCashReport({
     .filter((t) => t.type === 'income')
     .reduce((sum, t) => sum + t.amount, 0);
 
-  // Financial calculations for active class
   const totalExpense = classTransactions
     .filter((t) => t.type === 'expense')
     .reduce((sum, t) => sum + t.amount, 0);
@@ -99,27 +106,28 @@ export default function ParentCashReport({
 
   // Filtered transactions for the report table
   const getFilteredTransactions = () => {
-    const today = new Date();
+    if (printFilterType === 'income') {
+      return classTransactions.filter((t) => t.type === 'income');
+    }
     
-    if (filterType === 'month') {
-      const monthStr = selectedMonth || today.toISOString().substring(0, 7);
+    if (printFilterType === 'expense') {
+      return classTransactions.filter((t) => t.type === 'expense');
+    }
+
+    if (printFilterType === 'month') {
+      const monthStr = printMonth || new Date().toISOString().substring(0, 7);
       return classTransactions.filter((t) => t.date.startsWith(monthStr));
     }
     
-    if (filterType === 'week') {
-      const day = today.getDay();
-      const diff = today.getDate() - day + (day === 0 ? -6 : 1);
-      const monday = new Date(today.setDate(diff));
-      monday.setHours(0, 0, 0, 0);
-      
-      const sunday = new Date(monday);
-      sunday.setDate(monday.getDate() + 6);
-      sunday.setHours(23, 59, 59, 999);
-      
-      const monStr = monday.toISOString().substring(0, 10);
-      const sunStr = sunday.toISOString().substring(0, 10);
-      
-      return classTransactions.filter((t) => t.date >= monStr && t.date <= sunStr);
+    if (printFilterType === 'date_range') {
+      let filtered = classTransactions;
+      if (printStartDate) {
+        filtered = filtered.filter((t) => t.date >= printStartDate);
+      }
+      if (printEndDate) {
+        filtered = filtered.filter((t) => t.date <= printEndDate);
+      }
+      return filtered;
     }
     
     return classTransactions;
@@ -127,7 +135,6 @@ export default function ParentCashReport({
 
   const filteredTransactions = getFilteredTransactions();
 
-  // Filtered calculations for Pie Chart & Filtered summary
   const filteredIncome = filteredTransactions
     .filter((t) => t.type === 'income')
     .reduce((sum, t) => sum + t.amount, 0);
@@ -136,64 +143,91 @@ export default function ParentCashReport({
     .filter((t) => t.type === 'expense')
     .reduce((sum, t) => sum + t.amount, 0);
 
-  // Simple deterministic string hashing for IDs
-  const hashCode = (str: string) => {
-    let hash = 0;
-    for (let i = 0; i < str.length; i++) {
-      hash = str.charCodeAt(i) + ((hash << 5) - hash);
-    }
-    return hash;
+  // Consolidation grouping function for display table
+  const getGroupedTransactions = (txList: typeof filteredTransactions) => {
+    const grouped: any[] = [];
+    const incomeGroups: Record<string, any> = {};
+
+    txList.forEach((tx) => {
+      if (tx.type === 'expense' || !tx.studentId) {
+        // Keep standalone
+        grouped.push({
+          ...tx,
+          ids: [tx.id],
+          isMerged: false,
+          studentPayments: []
+        });
+      } else {
+        // Group student income by date + description
+        const key = `${tx.date}_${tx.description.trim().toLowerCase()}`;
+        if (incomeGroups[key]) {
+          const group = incomeGroups[key];
+          group.ids.push(tx.id);
+          group.amount += tx.amount;
+          group.studentPayments.push({
+            id: tx.id,
+            name: tx.studentName,
+            amount: tx.amount,
+          });
+        } else {
+          const newGroup = {
+            id: tx.id,
+            ids: [tx.id],
+            date: tx.date,
+            type: 'income',
+            description: tx.description,
+            amount: tx.amount,
+            isMerged: true,
+            studentPayments: [
+              {
+                id: tx.id,
+                name: tx.studentName,
+                amount: tx.amount,
+              },
+            ],
+          };
+          incomeGroups[key] = newGroup;
+          grouped.push(newGroup);
+        }
+      }
+    });
+
+    // Re-sort grouped transactions by date descending
+    grouped.sort((a, b) => b.date.localeCompare(a.date));
+    return grouped;
   };
 
-  // Consolidate student income transactions per day (perhari) for parents' view
-  const getConsolidatedTransactions = () => {
-    const studentIncomes = filteredTransactions.filter(
-      (t) => t.type === 'income' && t.studentId !== null
-    );
+  const displayTransactions = getGroupedTransactions(filteredTransactions);
 
-    // Group student incomes by date
-    const studentIncomesByDate: Record<string, number> = {};
-    studentIncomes.forEach((t) => {
-      studentIncomesByDate[t.date] = (studentIncomesByDate[t.date] || 0) + t.amount;
-    });
-
-    // Create consolidated student income rows per date
-    const consolidatedStudentIncomes = Object.entries(studentIncomesByDate).map(([date, amount]) => {
-      const consolidatedRow: Transaction = {
-        id: -(Math.abs(hashCode(date)) % 1000000) - 1000,
-        className: activeClassName,
-        type: 'income',
-        studentId: null,
-        studentName: 'Murid',
-        description: 'Kalkulasi Murid',
-        amount: amount,
-        date: date,
-      };
-      return consolidatedRow;
-    });
-
-    const nonStudentTransactions = filteredTransactions.filter(
-      (t) => !(t.type === 'income' && t.studentId !== null)
-    );
-
-    const combined = [...consolidatedStudentIncomes, ...nonStudentTransactions];
+  // Calculate bill payments for the selected child
+  const getStudentBillsSummary = () => {
+    if (!activeStudent) return [];
     
-    // Sort combined transactions by date descending, then secondary by ID descending
-    combined.sort((a, b) => {
-      const dateCompare = b.date.localeCompare(a.date);
-      if (dateCompare !== 0) return dateCompare;
-      return b.id - a.id;
-    });
+    // Filter bills for active class
+    const classBills = bills.filter(b => b.className === activeClassName);
 
-    return combined;
+    return classBills.map(bill => {
+      // Sum student payments for this bill category
+      const paid = classTransactions
+        .filter(t => t.studentId === activeStudent.id && t.type === 'income' && t.description.trim().toLowerCase() === bill.title.trim().toLowerCase())
+        .reduce((sum, t) => sum + t.amount, 0);
+
+      const remaining = Math.max(0, bill.amount - paid);
+
+      return {
+        title: bill.title,
+        amount: bill.amount,
+        paid,
+        remaining,
+      };
+    });
   };
 
-  const displayTransactions = getConsolidatedTransactions();
+  const studentBillsSummary = getStudentBillsSummary();
 
   // Chart rendering for comparison
   useEffect(() => {
     if (!chartRef.current) return;
-
     const ctx = chartRef.current.getContext('2d');
     if (!ctx) return;
 
@@ -211,7 +245,7 @@ export default function ParentCashReport({
           {
             data: hasData ? [filteredIncome, filteredExpense] : [1],
             backgroundColor: hasData
-              ? ['rgb(16, 185, 129)', 'rgb(239, 68, 68)'] // Emerald vs Red
+              ? ['rgb(16, 185, 129)', 'rgb(239, 68, 68)']
               : ['rgb(226, 232, 240)'],
             borderWidth: 1.5,
             borderColor: '#fff',
@@ -227,15 +261,6 @@ export default function ParentCashReport({
             labels: {
               font: { weight: 'bold', size: 11 },
               padding: 15,
-            },
-          },
-          tooltip: {
-            callbacks: {
-              label: function (context) {
-                if (!hasData) return ' Tidak ada transaksi';
-                const val = context.raw as number;
-                return ` Rp ${val.toLocaleString('id-ID')}`;
-              },
             },
           },
         },
@@ -263,16 +288,99 @@ export default function ParentCashReport({
 
   return (
     <div className="space-y-8">
+      
+      {/* 1. PRINT HEADER SECTION - MOVED TO THE TOP AND MATCHED FILTER STYLING */}
+      <div className="bg-white rounded-3xl border border-slate-100 p-6 space-y-4 shadow-xs no-print">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          {/* Print Filter Selector */}
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+            <div className="flex flex-wrap gap-1.5 p-1 bg-slate-100 rounded-xl text-[10px] font-bold w-fit">
+              {[
+                { id: 'all', label: 'Semua' },
+                { id: 'income', label: 'Pemasukan' },
+                { id: 'expense', label: 'Pengeluaran' },
+                { id: 'date_range', label: 'Rentang Tanggal' },
+                { id: 'month', label: 'Per Bulan' },
+              ].map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => setPrintFilterType(item.id as any)}
+                  className={`px-3.5 py-2 rounded-lg transition-all cursor-pointer whitespace-nowrap ${
+                    printFilterType === item.id ? 'bg-white text-slate-850 shadow-2xs' : 'text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <button
+            onClick={handlePrint}
+            className="py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-md shadow-emerald-50 cursor-pointer transition-all whitespace-nowrap self-start sm:self-auto"
+          >
+            <Printer className="w-4 h-4" />
+            <span>Cetak Laporan Keuangan</span>
+          </button>
+        </div>
+
+        {/* Conditional Inputs based on Filter */}
+        {['date_range', 'month'].includes(printFilterType) && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 max-w-2xl pt-2 border-t border-slate-50 animate-slide-in">
+            {printFilterType === 'date_range' && (
+              <>
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">Dari Tanggal</label>
+                  <input
+                    type="date"
+                    value={printStartDate}
+                    onChange={(e) => setPrintStartDate(e.target.value)}
+                    className="block w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-slate-400"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">Sampai Tanggal</label>
+                  <input
+                    type="date"
+                    value={printEndDate}
+                    onChange={(e) => setPrintEndDate(e.target.value)}
+                    className="block w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-slate-400"
+                  />
+                </div>
+              </>
+            )}
+
+            {printFilterType === 'month' && (
+              <div className="sm:col-span-2">
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">Pilih Bulan</label>
+                <select
+                  value={printMonth}
+                  onChange={(e) => setPrintMonth(e.target.value)}
+                  className="block w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-slate-400 cursor-pointer"
+                >
+                  <option value="" disabled>Pilih Bulan</option>
+                  {getAvailableMonths().map((m) => (
+                    <option key={m} value={m}>
+                      {formatMonthYear(m)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
       {/* Selector and Options Panel */}
       <div className="bg-white rounded-3xl border border-slate-100 p-6 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xs no-print">
         <div>
-          <h3 className="font-extrabold text-slate-850 text-base">Pilih Data Kas Kelas Anak</h3>
-          <p className="text-xs text-slate-450 font-semibold mt-0.5">
-            Pilih anak untuk melihat rincian laporan kas kelas mereka.
+          <h3 className="font-extrabold text-slate-850 text-base">Pilih Data Keuangan Anak</h3>
+          <p className="text-xs text-slate-455 font-semibold mt-0.5">
+            Pilih anak untuk melihat rincian laporan keuangan kelas mereka.
           </p>
         </div>
 
-        {/* Dropdown for selecting child */}
         {students.length > 1 ? (
           <div className="flex-shrink-0">
             <select
@@ -340,6 +448,53 @@ export default function ParentCashReport({
               </div>
             </div>
           </div>
+
+          {/* TOTAL TAGIHAN KAS BERDASARKAN KATEGORI */}
+          <div className="bg-white rounded-3xl border border-slate-100 p-6 space-y-4 shadow-xs">
+            <div>
+              <h4 className="font-extrabold text-slate-850 text-sm">Status Tagihan Murid ({activeStudent?.name})</h4>
+              <p className="text-[10px] text-slate-400 font-semibold mt-0.5">Rincian status tagihan wajib yang harus diselesaikan untuk anak Anda.</p>
+            </div>
+
+            {studentBillsSummary.length === 0 ? (
+              <p className="text-xs text-slate-400 font-semibold italic text-center py-6 border border-dashed border-slate-200 rounded-2xl">
+                Belum ada tagihan wajib yang ditetapkan oleh Wali Kelas.
+              </p>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {studentBillsSummary.map((b, idx) => (
+                  <div key={idx} className="p-4 bg-slate-50/50 border border-slate-150 rounded-2xl flex flex-col justify-between space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="font-extrabold text-slate-800 text-xs">{b.title}</span>
+                      {b.remaining === 0 ? (
+                        <span className="px-2 py-0.5 bg-emerald-50 text-emerald-800 text-[9px] font-extrabold rounded-full border border-emerald-100 flex items-center gap-0.5 select-none">
+                          <CheckCircle className="w-3 h-3" /> Lunas
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 bg-red-50 text-red-800 text-[9px] font-extrabold rounded-full border border-red-100 flex items-center gap-0.5 select-none">
+                          <AlertCircle className="w-3 h-3" /> Belum Lunas
+                        </span>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 text-[10px] font-semibold text-slate-500 pt-1.5 border-t border-slate-100">
+                      <div>
+                        <span className="block text-[8px] uppercase font-bold text-slate-400 leading-none mb-1">Tagihan:</span>
+                        <span className="text-slate-800">Rp {b.amount.toLocaleString('id-ID')}</span>
+                      </div>
+                      <div>
+                        <span className="block text-[8px] uppercase font-bold text-slate-400 leading-none mb-1">Dibayar:</span>
+                        <span className="text-emerald-600 font-bold">Rp {b.paid.toLocaleString('id-ID')}</span>
+                      </div>
+                      <div>
+                        <span className="block text-[8px] uppercase font-bold text-slate-400 leading-none mb-1">Sisa:</span>
+                        <span className={`font-extrabold ${b.remaining > 0 ? 'text-red-500' : 'text-slate-500'}`}>Rp {b.remaining.toLocaleString('id-ID')}</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* RIGHT PANEL: Pie Chart */}
@@ -358,68 +513,26 @@ export default function ParentCashReport({
       <div id="print-area-parent" className="bg-white rounded-3xl border border-slate-100 p-6 space-y-6 shadow-xs">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4">
           <div>
-            <h3 className="font-extrabold text-slate-850 text-base">Laporan Pembukuan Kas ({activeClassName})</h3>
-          </div>
-          
-          <div className="flex items-center gap-3 no-print">
-            {/* Period Filters */}
-            <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-xl text-[10px] font-bold">
-              <button
-                type="button"
-                onClick={() => { setFilterType('all'); }}
-                className={`px-2.5 py-1.5 rounded-lg transition-all cursor-pointer ${
-                  filterType === 'all' ? 'bg-white text-slate-850 shadow-xs' : 'text-slate-500 hover:text-slate-800'
-                }`}
-              >
-                Semua
-              </button>
-              <button
-                type="button"
-                onClick={() => { setFilterType('week'); }}
-                className={`px-2.5 py-1.5 rounded-lg transition-all cursor-pointer ${
-                  filterType === 'week' ? 'bg-white text-slate-850 shadow-xs' : 'text-slate-500 hover:text-slate-800'
-                }`}
-              >
-                Minggu Ini
-              </button>
-              <select
-                value={filterType === 'month' ? selectedMonth : ''}
-                onChange={(e) => {
-                  if (e.target.value) {
-                    setFilterType('month');
-                    setSelectedMonth(e.target.value);
-                  }
-                }}
-                className={`px-2 py-1 rounded-lg transition-all cursor-pointer border-0 text-[10px] font-bold focus:outline-none ${
-                  filterType === 'month' ? 'bg-white text-slate-850 shadow-xs' : 'bg-transparent text-slate-500 hover:text-slate-850'
-                }`}
-              >
-                <option value="" disabled>Pilih Bulan</option>
-                {getAvailableMonths().map((m) => (
-                  <option key={m} value={m}>
-                    {formatMonthYear(m)}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Print trigger */}
-            <button
-              onClick={handlePrint}
-              className="py-1.5 px-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-[10px] flex items-center gap-1 shadow-sm shadow-emerald-50 cursor-pointer"
-            >
-              <Printer className="w-3.5 h-3.5" />
-              <span>Cetak Laporan</span>
-            </button>
+            <h3 className="font-extrabold text-slate-850 text-base">Laporan Pembukuan Keuangan Kelas ({activeClassName})</h3>
           </div>
         </div>
 
-        {/* Print Header (Only visible on print) */}
+        {/* Print Header (Only visible on print layouts) */}
         <div className="hidden print:block border-b-2 border-slate-800 pb-4 mb-4">
           <h1 className="text-2xl font-black text-center text-slate-900 tracking-tight uppercase">Laporan Keuangan Kas Kelas</h1>
           <h2 className="text-lg font-bold text-center text-slate-700">Kelas: {activeClassName}</h2>
           <p className="text-xs text-center text-slate-500 font-bold mt-1">
-            Periode: {filterType === 'month' ? formatMonthYear(selectedMonth) : filterType === 'week' ? 'Minggu Ini' : 'Semua Transaksi'}
+            Periode: {
+              printFilterType === 'month'
+                ? formatMonthYear(printMonth)
+                : printFilterType === 'date_range'
+                ? `${printStartDate ? new Intl.DateTimeFormat('id-ID').format(new Date(printStartDate)) : ''} s/d ${printEndDate ? new Intl.DateTimeFormat('id-ID').format(new Date(printEndDate)) : ''}`
+                : printFilterType === 'income'
+                ? 'Pemasukan Saja'
+                : printFilterType === 'expense'
+                ? 'Pengeluaran Saja'
+                : 'Semua Transaksi'
+            }
           </p>
           <p className="text-xs text-center text-slate-400 font-semibold mt-0.5">Dicetak oleh Wali dari: {activeStudent?.name}</p>
           <p className="text-xs text-center text-slate-400 font-semibold">Tanggal cetak: {new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
@@ -468,10 +581,10 @@ export default function ParentCashReport({
                   }).format(new Date(tx.date));
 
                   return (
-                    <tr key={tx.id} className="border-b border-slate-100 hover:bg-slate-50/10 transition-colors">
-                      <td className="py-3 px-3 text-slate-400 text-[10px]">{idx + 1}</td>
-                      <td className="py-3 px-3">{formattedTxDate}</td>
-                      <td className="py-3 px-3">
+                    <tr key={tx.id} className="border-b border-slate-100 hover:bg-slate-50/10 transition-colors align-top">
+                      <td className="py-3.5 px-3 text-slate-400 text-[10px] align-top">{idx + 1}</td>
+                      <td className="py-3.5 px-3 align-top">{formattedTxDate}</td>
+                      <td className="py-3.5 px-3 align-top">
                         <span
                           className={`px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase border ${
                             tx.type === 'income'
@@ -482,29 +595,75 @@ export default function ParentCashReport({
                           {tx.type === 'income' ? 'Masuk' : 'Keluar'}
                         </span>
                       </td>
-                      <td className="py-3 px-3 max-w-sm truncate">
-                        {tx.type === 'income' ? (
-                          tx.id < 0 ? (
-                            <span>
-                              Kalkulasi <span className="font-bold text-slate-900">{tx.studentName}</span>
-                            </span>
-                          ) : tx.studentName ? (
-                            <span>
-                              Iuran dari <span className="font-bold text-slate-900">{tx.studentName}</span>
-                              <span className="text-slate-400 text-[10px] ml-1 font-semibold">({tx.description})</span>
-                            </span>
+                      <td className="py-3.5 px-3 align-top">
+                        <div className="space-y-1">
+                          {tx.type === 'income' ? (
+                            tx.isMerged ? (
+                              <div>
+                                <div className="h-6 flex items-center font-extrabold text-slate-900">{tx.description}</div>
+                                <div className="space-y-1.5 pl-6 border-l-2 border-slate-100 mt-1">
+                                  {tx.studentPayments.map((p: any, pIdx: number) => (
+                                    <div key={pIdx} className="h-5 flex items-center text-slate-500 font-semibold text-xs">
+                                      {p.name}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            ) : tx.studentName ? (
+                              <div>
+                                <span className="font-extrabold text-slate-800">{tx.description}</span>
+                                <div className="pl-6 border-l-2 border-slate-100 mt-1 text-slate-500 font-semibold text-xs h-5 flex items-center">
+                                  {tx.studentName}
+                                </div>
+                              </div>
+                            ) : (
+                              <div>
+                                <span>Pemasukan <span className="font-bold text-slate-900">Lainnya</span></span>
+                                <span className="text-slate-400 text-[10px] ml-1 font-semibold">({tx.description})</span>
+                              </div>
+                            )
                           ) : (
-                            <span>
-                              Pemasukan <span className="font-bold text-slate-900">Lainnya</span>
-                              <span className="text-slate-400 text-[10px] ml-1 font-semibold">({tx.description})</span>
-                            </span>
+                            <div className="flex items-center gap-2 h-6">
+                              <span>{tx.description}</span>
+                              {tx.photoPath && (
+                                <span className="px-1.5 py-0.5 bg-slate-100 border border-slate-200 text-slate-500 rounded-md text-[9px] font-bold">
+                                  Ada Bukti
+                                </span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                      <td className="py-3.5 px-3 text-right font-mono font-bold text-slate-800 align-top">
+                        {tx.type === 'income' ? (
+                          tx.isMerged ? (
+                            <div>
+                              <div className="h-6 flex items-center justify-end font-black text-slate-900">
+                                Rp {tx.amount.toLocaleString('id-ID')}
+                              </div>
+                              <div className="space-y-1.5 mt-1">
+                                {tx.studentPayments.map((p: any, pIdx: number) => (
+                                  <div key={pIdx} className="h-5 flex items-center justify-end text-slate-400 text-[10px] font-bold">
+                                    Rp {p.amount.toLocaleString('id-ID')}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          ) : (
+                            <div>
+                              <div className="h-6 flex items-center justify-end font-black text-slate-900">
+                                Rp {tx.amount.toLocaleString('id-ID')}
+                              </div>
+                              <div className="pl-6 mt-1 text-slate-400 text-[10px] font-bold h-5 flex items-center justify-end">
+                                Rp {tx.amount.toLocaleString('id-ID')}
+                              </div>
+                            </div>
                           )
                         ) : (
-                          <span>{tx.description}</span>
+                          <div className="h-6 flex items-center justify-end font-black text-red-500">
+                            Rp {tx.amount.toLocaleString('id-ID')}
+                          </div>
                         )}
-                      </td>
-                      <td className="py-3 px-3 text-right font-mono font-bold text-slate-800">
-                        Rp {tx.amount.toLocaleString('id-ID')}
                       </td>
                     </tr>
                   );

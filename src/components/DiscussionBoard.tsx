@@ -101,6 +101,34 @@ export default function DiscussionBoard({ initialDiscussions, currentUser }: Dis
     setReplyTo(null);
   };
 
+  const renderMessageWithLinks = (text: string, isMe: boolean) => {
+    if (!text) return '';
+    const urlRegex = /(https?:\/\/[^\s]+|www\.[^\s]+)/gi;
+    const parts = text.split(urlRegex);
+    
+    return parts.map((part, index) => {
+      if (part.match(urlRegex)) {
+        const hrefUrl = part.toLowerCase().startsWith('http') ? part : `https://${part}`;
+        return (
+          <a
+            key={index}
+            href={hrefUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={`underline font-extrabold break-all ${
+              isMe 
+                ? 'text-indigo-200 hover:text-indigo-100 transition-colors' 
+                : 'text-indigo-650 hover:text-indigo-850 transition-colors'
+            }`}
+          >
+            {part}
+          </a>
+        );
+      }
+      return part;
+    });
+  };
+
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!messageText.trim()) return;
@@ -142,7 +170,7 @@ export default function DiscussionBoard({ initialDiscussions, currentUser }: Dis
             <div className="w-16 h-16 rounded-2xl bg-slate-150 flex items-center justify-center text-3xl mb-4 shadow-inner">
               💬
             </div>
-            <p className="text-slate-450 font-bold text-sm">Belum ada diskusi.</p>
+            <p className="text-slate-455 font-bold text-sm">Belum ada diskusi.</p>
             <p className="text-xs text-slate-400 font-semibold max-w-xs mt-1">
               Mulai percakapan dengan menuliskan pesan Anda di kolom bawah.
             </p>
@@ -217,13 +245,13 @@ export default function DiscussionBoard({ initialDiscussions, currentUser }: Dis
                           <span className="font-extrabold block text-[10px] uppercase leading-tight">
                             {disc.replyTo.user.name}
                           </span>
-                          <span className="italic">{disc.replyTo.message}</span>
+                          <span className="italic">{renderMessageWithLinks(disc.replyTo.message, isMe)}</span>
                         </div>
                       </div>
                     )}
 
                     {/* Actual Message */}
-                    <p className="leading-relaxed whitespace-pre-wrap select-text">{disc.message}</p>
+                    <p className="leading-relaxed whitespace-pre-wrap select-text">{renderMessageWithLinks(disc.message, isMe)}</p>
 
                     {/* Reply Button (Hover overlay or simple trigger) */}
                     <button

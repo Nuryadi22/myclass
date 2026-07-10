@@ -5,9 +5,9 @@ import PunishmentForm from '@/components/PunishmentForm';
 export const dynamic = 'force-dynamic';
 
 export default async function TeacherPunishmentPage() {
-  // Fetch students for dropdown
+  // Fetch students for dropdown and QR matching
   const students = await prisma.student.findMany({
-    select: { id: true, name: true },
+    select: { id: true, name: true, qrCodeToken: true, studentId: true },
     orderBy: { name: 'asc' },
   });
 

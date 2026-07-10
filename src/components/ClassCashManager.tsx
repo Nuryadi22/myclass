@@ -1,9 +1,9 @@
 'use client';
 
 import React, { useState, useEffect, useRef, useTransition } from 'react';
-import { storeCashTransactionAction, deleteCashTransactionAction } from '@/app/actions/teacher';
+import { storeCashTransactionAction, deleteCashTransactionAction, storeClassBillAction, deleteClassBillAction } from '@/app/actions/teacher';
 import Chart from 'chart.js/auto';
-import { Loader2, Plus, Minus, Trash2, Printer, Calendar, Banknote, Receipt, Wallet, AlertCircle } from 'lucide-react';
+import { Loader2, Plus, Minus, Trash2, Printer, Calendar, Banknote, Receipt, Wallet, AlertCircle, Camera, Check, Upload, Image as ImageIcon, Eye, X } from 'lucide-react';
 
 interface Student {
   id: number;
@@ -20,53 +20,78 @@ interface Transaction {
   description: string;
   amount: number;
   date: string; // YYYY-MM-DD
+  photoPath: string | null;
+}
+
+interface ClassBill {
+  id: number;
+  title: string;
+  amount: number;
 }
 
 interface ClassCashManagerProps {
   className: string;
   students: Student[];
+  bills: ClassBill[];
   initialTransactions: Transaction[];
 }
 
 export default function ClassCashManager({
   className,
   students,
+  bills,
   initialTransactions,
 }: ClassCashManagerProps) {
   const [transactions, setTransactions] = useState<Transaction[]>(initialTransactions);
   const [tab, setTab] = useState<'income' | 'expense'>('income');
-  const [filterType, setFilterType] = useState<'all' | 'week' | 'month'>('all');
-  const [selectedMonth, setSelectedMonth] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
-  // Set default selected month to current month on mount
-  useEffect(() => {
-    const today = new Date();
-    setSelectedMonth(today.toISOString().substring(0, 7));
-  }, []);
+  // Print Filter States
+  const [printFilterType, setPrintFilterType] = useState<'all' | 'income' | 'expense' | 'date_range' | 'student' | 'month'>('all');
+  const [printStartDate, setPrintStartDate] = useState<string>('');
+  const [printEndDate, setPrintEndDate] = useState<string>('');
+  const [printStudentId, setPrintStudentId] = useState<string>('');
+  const [printMonth, setPrintMonth] = useState<string>('');
+
+  // Live Camera Photo Capture States for Expenses
+  const [expensePhotoMode, setExpensePhotoMode] = useState<'none' | 'upload' | 'camera'>('none');
+  const [cameraStreamActive, setCameraStreamActive] = useState(false);
+  const [cameraError, setCameraError] = useState<string | null>(null);
+  const [capturedPhotoBase64, setCapturedPhotoBase64] = useState<string | null>(null);
+  
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+
+  // Bill Settings Form States
+  const [billError, setBillError] = useState<string | null>(null);
+  const [billSuccess, setBillSuccess] = useState<string | null>(null);
+
+  // Lightbox Modal for Receipt Photo
+  const [activePhotoUrl, setActivePhotoUrl] = useState<string | null>(null);
 
   const chartRef = useRef<HTMLCanvasElement>(null);
   const chartInstance = useRef<Chart | null>(null);
 
   const todayStr = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Jakarta' }).format(new Date());
 
-  // Get all unique YYYY-MM months from transactions, sorted descending
+  useEffect(() => {
+    // Set default printing filter month to current month
+    const today = new Date();
+    setPrintMonth(today.toISOString().substring(0, 7));
+  }, []);
+
+  // Get available months for transactions print filter
   const getAvailableMonths = () => {
     const monthsSet = new Set<string>();
-    
-    // Always include current month
     const today = new Date();
-    const currentMonthStr = today.toISOString().substring(0, 7);
-    monthsSet.add(currentMonthStr);
-    
+    monthsSet.add(today.toISOString().substring(0, 7));
     transactions.forEach((t) => {
       if (t.date && t.date.length >= 7) {
         monthsSet.add(t.date.substring(0, 7));
       }
     });
-    
     return Array.from(monthsSet).sort((a, b) => b.localeCompare(a));
   };
 
@@ -77,65 +102,161 @@ export default function ClassCashManager({
       'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
       'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
     ];
-    const monthIndex = parseInt(month, 10) - 1;
-    return `${monthNames[monthIndex]} ${year}`;
+    return `${monthNames[parseInt(month, 10) - 1]} ${year}`;
   };
 
-  // Calculations
-  const totalIncome = transactions
+  // Live video preview start
+  const startCamera = async () => {
+    setCameraError(null);
+    setCapturedPhotoBase64(null);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment', width: 640, height: 480 },
+        audio: false,
+      });
+      streamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        setCameraStreamActive(true);
+      }
+    } catch (err) {
+      console.error(err);
+      setCameraError('Gagal mengakses kamera. Gunakan upload file sebagai alternatif.');
+    }
+  };
+
+  // Close live video stream
+  const stopCamera = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+    }
+    setCameraStreamActive(false);
+  };
+
+  // Capture photo from video feed
+  const captureSnapshot = () => {
+    if (!videoRef.current) return;
+    try {
+      const canvas = document.createElement('canvas');
+      canvas.width = videoRef.current.videoWidth || 640;
+      canvas.height = videoRef.current.videoHeight || 480;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+        setCapturedPhotoBase64(dataUrl);
+        stopCamera();
+      }
+    } catch (err) {
+      console.error('Failed to capture snapshot:', err);
+    }
+  };
+
+  // Reset captured camera photo
+  const resetCameraCapture = () => {
+    setCapturedPhotoBase64(null);
+    startCamera();
+  };
+
+  // Dynamic Filtering based on selected print/report criteria
+  const getFilteredTransactions = () => {
+    return transactions.filter((t) => {
+      if (printFilterType === 'income') {
+        return t.type === 'income';
+      }
+      if (printFilterType === 'expense') {
+        return t.type === 'expense';
+      }
+      if (printFilterType === 'date_range') {
+        if (printStartDate && t.date < printStartDate) return false;
+        if (printEndDate && t.date > printEndDate) return false;
+        return true;
+      }
+      if (printFilterType === 'student') {
+        if (!printStudentId) return true;
+        return t.studentId?.toString() === printStudentId;
+      }
+      if (printFilterType === 'month') {
+        if (!printMonth) return true;
+        return t.date.startsWith(printMonth);
+      }
+      return true; // printFilterType === 'all'
+    });
+  };
+
+  const filteredTransactions = getFilteredTransactions();
+
+  // Consolidation grouping function for display table
+  const getGroupedTransactions = (txList: typeof filteredTransactions) => {
+    const grouped: any[] = [];
+    const incomeGroups: Record<string, any> = {};
+
+    txList.forEach((tx) => {
+      if (tx.type === 'expense' || !tx.studentId) {
+        // Keep standalone
+        grouped.push({
+          ...tx,
+          ids: [tx.id],
+          isMerged: false,
+          studentPayments: []
+        });
+      } else {
+        // Group student income by date + description
+        const key = `${tx.date}_${tx.description.trim().toLowerCase()}`;
+        if (incomeGroups[key]) {
+          const group = incomeGroups[key];
+          group.ids.push(tx.id);
+          group.amount += tx.amount;
+          group.studentPayments.push({
+            id: tx.id,
+            name: tx.studentName,
+            amount: tx.amount,
+          });
+        } else {
+          const newGroup = {
+            id: tx.id,
+            ids: [tx.id],
+            date: tx.date,
+            type: 'income',
+            description: tx.description,
+            amount: tx.amount,
+            isMerged: true,
+            studentPayments: [
+              {
+                id: tx.id,
+                name: tx.studentName,
+                amount: tx.amount,
+              },
+            ],
+          };
+          incomeGroups[key] = newGroup;
+          grouped.push(newGroup);
+        }
+      }
+    });
+
+    // Re-sort grouped transactions by date descending
+    grouped.sort((a, b) => b.date.localeCompare(a.date));
+    return grouped;
+  };
+
+  const displayTransactions = getGroupedTransactions(filteredTransactions);
+
+  // Financial Calculations
+  const totalIncome = filteredTransactions
     .filter((t) => t.type === 'income')
     .reduce((sum, t) => sum + t.amount, 0);
 
-  const totalExpense = transactions
+  const totalExpense = filteredTransactions
     .filter((t) => t.type === 'expense')
     .reduce((sum, t) => sum + t.amount, 0);
 
   const balance = totalIncome - totalExpense;
 
-  // Filtered transactions for list
-  const getFilteredTransactions = () => {
-    const today = new Date();
-    
-    if (filterType === 'month') {
-      const monthStr = selectedMonth || today.toISOString().substring(0, 7);
-      return transactions.filter((t) => t.date.startsWith(monthStr));
-    }
-    
-    if (filterType === 'week') {
-      // Get Monday and Sunday of this week in local time
-      const day = today.getDay();
-      const diff = today.getDate() - day + (day === 0 ? -6 : 1);
-      const monday = new Date(today.setDate(diff));
-      monday.setHours(0, 0, 0, 0);
-      
-      const sunday = new Date(monday);
-      sunday.setDate(monday.getDate() + 6);
-      sunday.setHours(23, 59, 59, 999);
-      
-      const monStr = monday.toISOString().substring(0, 10);
-      const sunStr = sunday.toISOString().substring(0, 10);
-      
-      return transactions.filter((t) => t.date >= monStr && t.date <= sunStr);
-    }
-    
-    return transactions;
-  };
-
-  const filteredTransactions = getFilteredTransactions();
-
-  // Filtered calculations for Pie Chart & Filtered summary
-  const filteredIncome = filteredTransactions
-    .filter((t) => t.type === 'income')
-    .reduce((sum, t) => sum + t.amount, 0);
-
-  const filteredExpense = filteredTransactions
-    .filter((t) => t.type === 'expense')
-    .reduce((sum, t) => sum + t.amount, 0);
-
-  // Chart rendering
+  // Chart Rendering
   useEffect(() => {
     if (!chartRef.current) return;
-
     const ctx = chartRef.current.getContext('2d');
     if (!ctx) return;
 
@@ -143,7 +264,7 @@ export default function ClassCashManager({
       chartInstance.current.destroy();
     }
 
-    const hasData = filteredIncome > 0 || filteredExpense > 0;
+    const hasData = totalIncome > 0 || totalExpense > 0;
 
     chartInstance.current = new Chart(ctx, {
       type: 'pie',
@@ -151,10 +272,10 @@ export default function ClassCashManager({
         labels: hasData ? ['Pemasukan', 'Pengeluaran'] : ['Belum Ada Transaksi'],
         datasets: [
           {
-            data: hasData ? [filteredIncome, filteredExpense] : [1],
+            data: hasData ? [totalIncome, totalExpense] : [1],
             backgroundColor: hasData
-              ? ['rgb(16, 185, 129)', 'rgb(239, 68, 68)'] // Emerald vs Red
-              : ['rgb(226, 232, 240)'], // Slate-200
+              ? ['rgb(16, 185, 129)', 'rgb(239, 68, 68)']
+              : ['rgb(226, 232, 240)'],
             borderWidth: 1.5,
             borderColor: '#fff',
           },
@@ -171,15 +292,6 @@ export default function ClassCashManager({
               padding: 15,
             },
           },
-          tooltip: {
-            callbacks: {
-              label: function (context) {
-                if (!hasData) return ' Tidak ada transaksi';
-                const val = context.raw as number;
-                return ` Rp ${val.toLocaleString('id-ID')}`;
-              },
-            },
-          },
         },
       },
     });
@@ -189,15 +301,18 @@ export default function ClassCashManager({
         chartInstance.current.destroy();
       }
     };
-  }, [filteredIncome, filteredExpense]);
+  }, [totalIncome, totalExpense]);
 
-  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmitTransaction = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError(null);
     setSuccess(null);
 
     const formData = new FormData(e.currentTarget);
     formData.append('type', tab);
+    if (tab === 'expense' && capturedPhotoBase64) {
+      formData.append('photo_base64', capturedPhotoBase64);
+    }
 
     const formEl = e.currentTarget;
 
@@ -207,29 +322,65 @@ export default function ClassCashManager({
         setError(result.error);
       } else if (result?.success) {
         setSuccess(result.message || 'Transaksi kas berhasil disimpan.');
+        stopCamera();
+        setCapturedPhotoBase64(null);
+        setExpensePhotoMode('none');
         formEl.reset();
-        
-        // Refresh local state by pulling all transactions
-        // Instead of reloading page, let's update list locally
-        // Next.js server actions revalidatePath updates the page,
-        // but for smooth SPA-like experience we can trigger a soft refresh
-        // or just let revalidatePath handle server rendering.
-        // We reload using window.location.reload() for ease, or rely on router.refresh.
-        // Let's reload to fetch refreshed data cleanly.
         window.location.reload();
       }
     });
   };
 
-  const handleDelete = (id: number) => {
+  const handleDeleteTransaction = (ids: number[]) => {
     if (!confirm('Apakah Anda yakin ingin menghapus transaksi kas ini?')) return;
 
     startTransition(async () => {
-      const result = await deleteCashTransactionAction(id);
+      let success = true;
+      let errorMsg = '';
+      for (const id of ids) {
+        const result = await deleteCashTransactionAction(id);
+        if (!result?.success) {
+          success = false;
+          errorMsg = result?.error || 'Gagal menghapus salah satu transaksi.';
+        }
+      }
+      if (success) {
+        window.location.reload();
+      } else {
+        alert(errorMsg);
+      }
+    });
+  };
+
+  const handleSubmitBill = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setBillError(null);
+    setBillSuccess(null);
+
+    const formData = new FormData(e.currentTarget);
+    const formEl = e.currentTarget;
+
+    startTransition(async () => {
+      const result = await storeClassBillAction(null, formData);
+      if (result?.error) {
+        setBillError(result.error);
+      } else if (result?.success) {
+        setBillSuccess(result.message || 'Tagihan berhasil ditambahkan.');
+        formEl.reset();
+        window.location.reload();
+      }
+    });
+  };
+
+  const handleDeleteBill = (id: number) => {
+    if (!confirm('Apakah Anda yakin ingin menghapus tagihan kelas ini?')) return;
+
+    startTransition(async () => {
+      const result = await deleteClassBillAction(id);
       if (result?.success) {
         window.location.reload();
       } else {
-        alert(result?.error || 'Gagal menghapus transaksi.');
+        alert(result?.error || 'Gagal menghapus tagihan.');
       }
     });
   };
@@ -239,62 +390,153 @@ export default function ClassCashManager({
   };
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
-      {/* LEFT & CENTER PANEL (Forms + Report List) */}
-      <div className="lg:col-span-2 space-y-8 print:hidden">
-        
-        {/* STATS OVERVIEW CARDS */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-          {/* Balance card */}
-          <div className="bg-emerald-50 border border-emerald-100 p-6 rounded-3xl flex items-center justify-between shadow-3xs">
-            <div className="space-y-1">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600">Saldo Kas Kelas</span>
-              <h3 className="text-xl font-extrabold text-emerald-850">
-                Rp {balance.toLocaleString('id-ID')}
-              </h3>
-              <span className="text-[9px] text-emerald-500 font-bold block">Sisa dana tersedia</span>
-            </div>
-            <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center">
-              <Wallet className="w-5 h-5" />
-            </div>
-          </div>
-
-          {/* Income card */}
-          <div className="bg-white border border-slate-100 p-6 rounded-3xl flex items-center justify-between shadow-3xs">
-            <div className="space-y-1">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total Pemasukan</span>
-              <h3 className="text-xl font-extrabold text-emerald-600">
-                Rp {totalIncome.toLocaleString('id-ID')}
-              </h3>
-              <span className="text-[9px] text-slate-400 font-semibold block">Dari iuran murid dll</span>
-            </div>
-            <div className="w-10 h-10 rounded-xl bg-slate-50 text-emerald-650 flex items-center justify-center">
-              <Banknote className="w-5 h-5" />
+    <div className="space-y-8">
+      
+      {/* 1. PRINT/REPORT OPTIONS - PLACED AT THE VERY TOP */}
+      <div className="bg-white rounded-3xl border border-slate-100 p-6 space-y-4 shadow-3xs print:hidden">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          {/* Print Filter Selector */}
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+            <div className="flex flex-wrap gap-1.5 p-1 bg-slate-100 rounded-xl text-[10px] font-bold w-fit">
+              {[
+                { id: 'all', label: 'Semua' },
+                { id: 'income', label: 'Pemasukan' },
+                { id: 'expense', label: 'Pengeluaran' },
+                { id: 'date_range', label: 'Rentang Tanggal' },
+                { id: 'student', label: 'Per Siswa' },
+                { id: 'month', label: 'Per Bulan' },
+              ].map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => setPrintFilterType(item.id as any)}
+                  className={`px-3.5 py-2 rounded-lg transition-all cursor-pointer whitespace-nowrap ${
+                    printFilterType === item.id ? 'bg-white text-slate-850 shadow-2xs' : 'text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  {item.label}
+                </button>
+              ))}
             </div>
           </div>
 
-          {/* Expense card */}
-          <div className="bg-white border border-slate-100 p-6 rounded-3xl flex items-center justify-between shadow-3xs">
-            <div className="space-y-1">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total Pengeluaran</span>
-              <h3 className="text-xl font-extrabold text-red-500">
-                Rp {totalExpense.toLocaleString('id-ID')}
-              </h3>
-              <span className="text-[9px] text-slate-400 font-semibold block">Untuk kebutuhan kelas</span>
+          <button
+            onClick={handlePrint}
+            className="py-2.5 px-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-md shadow-indigo-150 transition-all cursor-pointer whitespace-nowrap self-start sm:self-auto"
+          >
+            <Printer className="w-4 h-4" />
+            <span>Cetak Keuangan Sekarang</span>
+          </button>
+        </div>
+          {/* Conditional Inputs based on Filter */}
+          {['date_range', 'student', 'month'].includes(printFilterType) && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 max-w-2xl pt-2 border-t border-slate-50 animate-slide-in">
+              {printFilterType === 'date_range' && (
+                <>
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">Dari Tanggal</label>
+                    <input
+                      type="date"
+                      value={printStartDate}
+                      onChange={(e) => setPrintStartDate(e.target.value)}
+                      className="block w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-slate-400"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">Sampai Tanggal</label>
+                    <input
+                      type="date"
+                      value={printEndDate}
+                      onChange={(e) => setPrintEndDate(e.target.value)}
+                      className="block w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-slate-400"
+                    />
+                  </div>
+                </>
+              )}
+
+              {printFilterType === 'student' && (
+                <div className="sm:col-span-2">
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">Pilih Siswa</label>
+                  <select
+                    value={printStudentId}
+                    onChange={(e) => setPrintStudentId(e.target.value)}
+                    className="block w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-slate-400 cursor-pointer"
+                  >
+                    <option value="">-- Semua Siswa --</option>
+                    {students.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name} ({s.studentId})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {printFilterType === 'month' && (
+                <div className="sm:col-span-2">
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">Pilih Bulan</label>
+                  <select
+                    value={printMonth}
+                    onChange={(e) => setPrintMonth(e.target.value)}
+                    className="block w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-slate-400 cursor-pointer"
+                  >
+                    <option value="" disabled>Pilih Bulan</option>
+                    {getAvailableMonths().map((m) => (
+                      <option key={m} value={m}>
+                        {formatMonthYear(m)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
             </div>
-            <div className="w-10 h-10 rounded-xl bg-slate-50 text-red-500 flex items-center justify-center">
-              <Receipt className="w-5 h-5" />
-            </div>
+          )}
+        </div>
+
+      {/* 2. STATS OVERVIEW CARDS */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 print:hidden">
+        <div className="bg-emerald-50 border border-emerald-100 p-6 rounded-3xl flex items-center justify-between shadow-3xs">
+          <div className="space-y-1">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600">Saldo Tersedia</span>
+            <h3 className="text-xl font-extrabold text-emerald-850">Rp {balance.toLocaleString('id-ID')}</h3>
+            <span className="text-[9px] text-emerald-555 text-emerald-500 font-bold block">Pemasukan dikurangi pengeluaran</span>
+          </div>
+          <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center">
+            <Wallet className="w-5 h-5" />
           </div>
         </div>
 
-        {/* INPUT TRANSACTION FORM */}
-        <div className="bg-white rounded-3xl border border-slate-100 p-6 space-y-6 shadow-3xs">
-          {/* Tab Selection */}
+        <div className="bg-white border border-slate-100 p-6 rounded-3xl flex items-center justify-between shadow-3xs">
+          <div className="space-y-1">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total Pemasukan</span>
+            <h3 className="text-xl font-extrabold text-emerald-600">Rp {totalIncome.toLocaleString('id-ID')}</h3>
+            <span className="text-[9px] text-slate-400 font-semibold block">Dari iuran kas dan tagihan</span>
+          </div>
+          <div className="w-10 h-10 rounded-xl bg-slate-50 text-emerald-650 flex items-center justify-center">
+            <Banknote className="w-5 h-5" />
+          </div>
+        </div>
+
+        <div className="bg-white border border-slate-100 p-6 rounded-3xl flex items-center justify-between shadow-3xs">
+          <div className="space-y-1">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total Pengeluaran</span>
+            <h3 className="text-xl font-extrabold text-red-500">Rp {totalExpense.toLocaleString('id-ID')}</h3>
+            <span className="text-[9px] text-slate-400 font-semibold block">Belanja & kebutuhan kelas</span>
+          </div>
+          <div className="w-10 h-10 rounded-xl bg-slate-50 text-red-500 flex items-center justify-center">
+            <Receipt className="w-5 h-5" />
+          </div>
+        </div>
+      </div>
+
+      {/* 3. INPUT TRANSACTION FORM & RATIO CHART */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start print:hidden">
+        {/* Input Form (Spans 2 cols) */}
+        <div className="lg:col-span-2 bg-white rounded-3xl border border-slate-100 p-6 space-y-6 shadow-3xs">
           <div className="flex border-b border-slate-100 pb-4 justify-between items-center">
             <div>
-              <h3 className="font-extrabold text-slate-855 text-slate-850 text-base">Catat Transaksi Baru</h3>
-              <p className="text-[10px] text-slate-400 font-semibold mt-0.5">Input uang kas masuk dari murid atau pengeluaran operasional.</p>
+              <h3 className="font-extrabold text-slate-850 text-base">Catat Transaksi Baru</h3>
+              <p className="text-[10px] text-slate-400 font-semibold mt-0.5">Input pemasukan murid atau pengeluaran operasional.</p>
             </div>
             <div className="flex gap-1.5 p-1 bg-slate-100 rounded-xl text-xs font-bold">
               <button
@@ -331,15 +573,18 @@ export default function ClassCashManager({
           )}
 
           {success && (
-            <div className="p-4 bg-emerald-50 border border-emerald-100 text-emerald-800 rounded-2xl flex items-start gap-3 text-xs">
-              <span className="font-bold">Berhasil: </span>
-              <span>{success}</span>
+            <div className="p-4 bg-emerald-50 border border-emerald-100 text-emerald-800 rounded-2xl flex items-start gap-3 text-xs animate-slide-in">
+              <Check className="w-4 h-4 text-emerald-600 flex-shrink-0 mt-0.5" />
+              <div>
+                <span className="font-bold">Berhasil: </span>
+                <span>{success}</span>
+              </div>
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmitTransaction} className="space-y-4" encType="multipart/form-data">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {/* If Income: Select student dropdown */}
+              {/* Income vs Expense Selection Inputs */}
               {tab === 'income' ? (
                 <div>
                   <label htmlFor="student_id" className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">
@@ -363,7 +608,7 @@ export default function ClassCashManager({
               ) : (
                 <div>
                   <label htmlFor="description" className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">
-                    Jenis Pengeluaran
+                    Detail Pengeluaran (Keterangan)
                   </label>
                   <input
                     id="description"
@@ -407,30 +652,138 @@ export default function ClassCashManager({
                 />
               </div>
 
-              {/* If Income: Add description/notes field */}
+              {/* INCOME: Dropdown choices instead of text description input */}
               {tab === 'income' && (
                 <div>
                   <label htmlFor="description" className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">
                     Keterangan Tambahan
                   </label>
-                  <input
+                  <select
                     id="description"
                     name="description"
-                    type="text"
                     required
-                    placeholder="Contoh: Iuran Kas Minggu 1, Uang Denda, dll"
-                    className="block w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-800 focus:border-slate-800 focus:bg-white text-xs font-semibold transition-all"
-                  />
+                    className="block w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-800 focus:border-slate-800 focus:bg-white text-xs font-semibold transition-all cursor-pointer"
+                  >
+                    <option value="Iuran Kas">Iuran Kas</option>
+                    <option value="Bayar Buku">Bayar Buku</option>
+                    <option value="Pemasukan Lainnya">Pemasukan Lainnya</option>
+                  </select>
+                </div>
+              )}
+
+              {/* EXPENSE: Photo attachments selector inline with Tanggal Transaksi */}
+              {tab === 'expense' && (
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">
+                    Foto Bukti
+                  </label>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setExpensePhotoMode('upload');
+                        stopCamera();
+                        setCapturedPhotoBase64(null);
+                      }}
+                      className={`flex-1 px-3 py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 border transition-all cursor-pointer ${
+                        expensePhotoMode === 'upload' ? 'bg-slate-800 text-white border-slate-800' : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      <Upload className="w-3.5 h-3.5" />
+                      <span>Upload File</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setExpensePhotoMode('camera');
+                        startCamera();
+                      }}
+                      className={`flex-1 px-3 py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 border transition-all cursor-pointer ${
+                        expensePhotoMode === 'camera' ? 'bg-slate-800 text-white border-slate-800' : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      <Camera className="w-3.5 h-3.5" />
+                      <span>Foto (Kamera)</span>
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
+
+            {/* EXPENSE: Upload File or Camera View renders below the inline fields */}
+            {tab === 'expense' && expensePhotoMode !== 'none' && (
+              <div className="pt-2 border-t border-slate-100 space-y-4">
+                {expensePhotoMode === 'upload' && (
+                  <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl animate-slide-in">
+                    <input
+                      type="file"
+                      name="photo_file"
+                      accept="image/*"
+                      className="block w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-slate-200 file:text-slate-700 hover:file:bg-slate-350 cursor-pointer"
+                    />
+                  </div>
+                )}
+
+                {expensePhotoMode === 'camera' && (
+                  <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-3 flex flex-col items-center animate-slide-in">
+                    {cameraError && (
+                      <p className="text-xs text-red-600 font-bold flex items-center gap-1"><AlertCircle className="w-4 h-4" />{cameraError}</p>
+                    )}
+                    
+                    {!capturedPhotoBase64 && !cameraError && (
+                      <div className="w-full max-w-xs aspect-video bg-slate-900 rounded-xl overflow-hidden relative shadow-inner">
+                        <video ref={videoRef} autoPlay playsInline className="w-full h-full object-cover" />
+                      </div>
+                    )}
+
+                    {capturedPhotoBase64 && (
+                      <div className="w-full max-w-xs aspect-video bg-slate-100 rounded-xl overflow-hidden relative border border-slate-200">
+                        <img src={capturedPhotoBase64} alt="Captured receipt" className="w-full h-full object-cover" />
+                      </div>
+                    )}
+
+                    <div className="flex gap-2">
+                      {cameraStreamActive && (
+                        <button
+                          type="button"
+                          onClick={captureSnapshot}
+                          className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-xs transition-all cursor-pointer"
+                        >
+                          Ambil Snapshot
+                        </button>
+                      )}
+                      {capturedPhotoBase64 && (
+                        <button
+                          type="button"
+                          onClick={resetCameraCapture}
+                          className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-bold rounded-xl transition-all cursor-pointer"
+                        >
+                          Foto Ulang
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          stopCamera();
+                          setExpensePhotoMode('none');
+                          setCapturedPhotoBase64(null);
+                        }}
+                        className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-500 text-xs font-bold rounded-xl transition-all cursor-pointer"
+                      >
+                        Batal
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
             <button
               type="submit"
               disabled={isPending}
               className={`w-full py-2.5 text-white font-bold rounded-xl text-xs shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer ${
                 tab === 'income'
-                  ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-50'
+                  ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-55 shadow-emerald-50'
                   : 'bg-red-600 hover:bg-red-700 shadow-red-50'
               }`}
             >
@@ -446,88 +799,136 @@ export default function ClassCashManager({
           </form>
         </div>
 
+        {/* Financial Ratio card */}
+        <div className="bg-white rounded-3xl border border-slate-100 p-6 space-y-6 shadow-3xs">
+          <div>
+            <h3 className="font-extrabold text-slate-850 text-base">Rasio Keuangan Kelas</h3>
+            <p className="text-[10px] text-slate-400 font-semibold mt-0.5">Persentase perbandingan kas masuk dan keluar terfilter.</p>
+          </div>
+          <div className="relative h-60 w-full flex items-center justify-center">
+            <canvas ref={chartRef}></canvas>
+          </div>
+        </div>
       </div>
 
-      {/* RIGHT PANEL (Pie Chart) */}
+      {/* 4. CLASS BILLS MANAGER - CONFIGURATION BOARD */}
       <div className="bg-white rounded-3xl border border-slate-100 p-6 space-y-6 shadow-3xs print:hidden">
         <div>
-          <h3 className="font-extrabold text-slate-850 text-base">Rasio Keuangan Kelas</h3>
-          <p className="text-[10px] text-slate-400 font-semibold mt-0.5">Persentase perbandingan kas masuk dan keluar kelas.</p>
+          <h3 className="font-extrabold text-slate-850 text-base">Pengaturan Tagihan Keuangan Kelas</h3>
+          <p className="text-xs text-slate-400 font-semibold mt-0.5">Tetapkan iuran yang wajib dibayarkan oleh setiap murid di kelas ini.</p>
         </div>
-        <div className="relative h-60 w-full flex items-center justify-center">
-          <canvas ref={chartRef}></canvas>
+
+        {billError && (
+          <div className="p-4 bg-red-50 border border-red-100 text-red-800 rounded-2xl flex items-start gap-3 text-xs animate-shake">
+            <AlertCircle className="w-4 h-4 text-red-650" />
+            <span>{billError}</span>
+          </div>
+        )}
+
+        {billSuccess && (
+          <div className="p-4 bg-emerald-50 border border-emerald-100 text-emerald-800 rounded-2xl flex items-start gap-3 text-xs">
+            <Check className="w-4 h-4 text-emerald-650" />
+            <span>{billSuccess}</span>
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 items-start">
+          {/* Create new Class Bill */}
+          <div className="bg-slate-50 border border-slate-100 rounded-2xl p-5 space-y-4">
+            <h4 className="font-bold text-slate-800 text-xs uppercase tracking-wide">Buat Tagihan Baru</h4>
+            <form onSubmit={handleSubmitBill} className="space-y-3">
+              <div>
+                <label htmlFor="bill_title" className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">Judul Tagihan</label>
+                <select
+                  id="bill_title"
+                  name="title"
+                  required
+                  className="block w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-slate-400 cursor-pointer"
+                >
+                  <option value="Iuran Kas">Iuran Kas</option>
+                  <option value="Bayar Buku">Bayar Buku</option>
+                  <option value="Tagihan Lainnya">Tagihan Lainnya</option>
+                </select>
+              </div>
+
+              <div>
+                <label htmlFor="bill_amount" className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">Jumlah Wajib Bayar (Rp)</label>
+                <input
+                  id="bill_amount"
+                  name="amount"
+                  type="number"
+                  min="1000"
+                  required
+                  placeholder="Misal: 50000"
+                  className="block w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-slate-400"
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={isPending}
+                className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1 shadow-sm transition-all cursor-pointer"
+              >
+                {isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <span>Buat Tagihan</span>}
+              </button>
+            </form>
+          </div>
+
+          {/* List of existing class bills */}
+          <div className="md:col-span-2 space-y-3">
+            <h4 className="font-bold text-slate-800 text-xs uppercase tracking-wide">Daftar Tagihan Kelas Aktif</h4>
+            {bills.length === 0 ? (
+              <p className="text-xs text-slate-400 font-semibold py-8 text-center italic border border-dashed border-slate-200 rounded-2xl">Belum ada tagihan kelas yang diatur.</p>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {bills.map((bill) => (
+                  <div key={bill.id} className="bg-white border border-slate-100 rounded-2xl p-4 flex items-center justify-between shadow-2xs hover:shadow-xs transition-shadow">
+                    <div>
+                      <p className="font-extrabold text-slate-800 text-xs">{bill.title}</p>
+                      <p className="text-[10px] text-slate-400 font-bold uppercase mt-0.5">Wajib Bayar: Rp {bill.amount.toLocaleString('id-ID')}</p>
+                    </div>
+                    <button
+                      onClick={() => handleDeleteBill(bill.id)}
+                      className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors cursor-pointer"
+                      title="Hapus Tagihan"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
-      {/* BOTTOM REPORT LOGS & TABLE (Contains print ID) */}
-      <div id="print-area" className="col-span-1 lg:col-span-3 bg-white rounded-3xl border border-slate-100 p-6 space-y-6 shadow-3xs">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4">
-          <div>
-            <h3 className="font-extrabold text-slate-850 text-lg">Laporan Pembukuan Kas Kelas ({className})</h3>
-            <p className="text-xs text-slate-400 font-semibold mt-0.5">
-              Rincian seluruh pencatatan transaksi masuk dan keluar kas kelas.
-            </p>
-          </div>
-          
-          <div className="flex items-center gap-3 print:hidden">
-            {/* Period Filters */}
-            <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-xl text-[10px] font-bold">
-              <button
-                type="button"
-                onClick={() => { setFilterType('all'); }}
-                className={`px-2.5 py-1.5 rounded-lg transition-all cursor-pointer ${
-                  filterType === 'all' ? 'bg-white text-slate-850 shadow-xs' : 'text-slate-500 hover:text-slate-800'
-                }`}
-              >
-                Semua
-              </button>
-              <button
-                type="button"
-                onClick={() => { setFilterType('week'); }}
-                className={`px-2.5 py-1.5 rounded-lg transition-all cursor-pointer ${
-                  filterType === 'week' ? 'bg-white text-slate-855 shadow-xs' : 'text-slate-500 hover:text-slate-800'
-                }`}
-              >
-                Minggu Ini
-              </button>
-              <select
-                value={filterType === 'month' ? selectedMonth : ''}
-                onChange={(e) => {
-                  if (e.target.value) {
-                    setFilterType('month');
-                    setSelectedMonth(e.target.value);
-                  }
-                }}
-                className={`px-2 py-1 rounded-lg transition-all cursor-pointer border-0 text-[10px] font-bold focus:outline-none ${
-                  filterType === 'month' ? 'bg-white text-slate-850 shadow-xs' : 'bg-transparent text-slate-500 hover:text-slate-850'
-                }`}
-              >
-                <option value="" disabled>Pilih Bulan</option>
-                {getAvailableMonths().map((m) => (
-                  <option key={m} value={m}>
-                    {formatMonthYear(m)}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Print trigger */}
-            <button
-              onClick={handlePrint}
-              className="py-1.5 px-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-[10px] flex items-center gap-1 shadow-sm shadow-indigo-100 cursor-pointer"
-            >
-              <Printer className="w-3.5 h-3.5" />
-              <span>Cetak Laporan</span>
-            </button>
-          </div>
+      {/* 5. DETAILED TRANSACTION LEDGER TABLE (Contains print ID) */}
+      <div id="print-area" className="bg-white rounded-3xl border border-slate-100 p-6 space-y-6 shadow-3xs">
+        <div>
+          <h3 className="font-extrabold text-slate-850 text-lg">Laporan Pembukuan Keuangan Kelas ({className})</h3>
+          <p className="text-xs text-slate-400 font-semibold mt-0.5 print:hidden">
+            Rincian seluruh pencatatan transaksi masuk dan keluar kas keuangan kelas.
+          </p>
         </div>
 
-        {/* Print Header (Only visible on print) */}
-        <div className="hidden print:block border-b-2 border-slate-800 pb-4 mb-4">
+        {/* Print Header (Only visible on print layouts) */}
+        <div className="hidden print:block border-b-2 border-slate-850 pb-4 mb-4">
           <h1 className="text-2xl font-black text-center text-slate-900 tracking-tight uppercase">Laporan Keuangan Kas Kelas</h1>
           <h2 className="text-lg font-bold text-center text-slate-700">Kelas: {className}</h2>
           <p className="text-xs text-center text-slate-500 font-bold mt-1">
-            Periode: {filterType === 'month' ? formatMonthYear(selectedMonth) : filterType === 'week' ? 'Minggu Ini' : 'Semua Transaksi'}
+            Filter Cetak: {
+              printFilterType === 'month'
+                ? formatMonthYear(printMonth)
+                : printFilterType === 'date_range'
+                ? `Rentang ${printStartDate} s/d ${printEndDate}`
+                : printFilterType === 'student'
+                ? 'Per Siswa'
+                : printFilterType === 'income'
+                ? 'Pemasukan Saja'
+                : printFilterType === 'expense'
+                ? 'Pengeluaran Saja'
+                : 'Semua Transaksi'
+            }
           </p>
           <p className="text-xs text-center text-slate-400 font-semibold mt-0.5">Dicetak pada tanggal: {new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
           
@@ -547,7 +948,7 @@ export default function ClassCashManager({
           </div>
         </div>
 
-        {/* Table list */}
+        {/* Transactions Table List */}
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs border-collapse">
             <thead>
@@ -561,14 +962,14 @@ export default function ClassCashManager({
               </tr>
             </thead>
             <tbody className="font-semibold text-slate-700">
-              {filteredTransactions.length === 0 ? (
+              {displayTransactions.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="py-12 text-center text-slate-400 font-bold">
                     Tidak ada catatan transaksi dalam periode ini.
                   </td>
                 </tr>
               ) : (
-                filteredTransactions.map((tx, idx) => {
+                displayTransactions.map((tx, idx) => {
                   const formattedTxDate = new Intl.DateTimeFormat('id-ID', {
                     day: 'numeric',
                     month: 'short',
@@ -576,10 +977,10 @@ export default function ClassCashManager({
                   }).format(new Date(tx.date));
 
                   return (
-                    <tr key={tx.id} className="border-b border-slate-100 hover:bg-slate-50/10 transition-colors">
-                      <td className="py-3 px-3 text-slate-400 text-[10px]">{idx + 1}</td>
-                      <td className="py-3 px-3">{formattedTxDate}</td>
-                      <td className="py-3 px-3">
+                    <tr key={tx.id} className="border-b border-slate-100 hover:bg-slate-50/10 transition-colors align-top">
+                      <td className="py-3.5 px-3 text-slate-400 text-[10px] align-top">{idx + 1}</td>
+                      <td className="py-3.5 px-3 align-top">{formattedTxDate}</td>
+                      <td className="py-3.5 px-3 align-top">
                         <span
                           className={`px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase border ${
                             tx.type === 'income'
@@ -590,29 +991,85 @@ export default function ClassCashManager({
                           {tx.type === 'income' ? 'Masuk' : 'Keluar'}
                         </span>
                       </td>
-                      <td className="py-3 px-3 max-w-sm truncate">
-                        {tx.type === 'income' ? (
-                          tx.studentName ? (
-                            <span>
-                              Iuran dari <span className="font-bold text-slate-900">{tx.studentName}</span>
-                              <span className="text-slate-400 text-[10px] ml-1 font-semibold">({tx.description})</span>
-                            </span>
+                      <td className="py-3.5 px-3 align-top">
+                        <div className="space-y-1">
+                          {tx.type === 'income' ? (
+                            tx.isMerged ? (
+                              <div>
+                                <div className="h-6 flex items-center font-extrabold text-slate-900">{tx.description}</div>
+                                <div className="space-y-1.5 pl-6 border-l-2 border-slate-100 mt-1">
+                                  {tx.studentPayments.map((p: any, pIdx: number) => (
+                                    <div key={pIdx} className="h-5 flex items-center text-slate-500 font-semibold text-xs">
+                                      {p.name}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            ) : tx.studentName ? (
+                              <div>
+                                <span className="font-extrabold text-slate-800">{tx.description}</span>
+                                <div className="pl-6 border-l-2 border-slate-100 mt-1 text-slate-500 font-semibold text-xs h-5 flex items-center">
+                                  {tx.studentName}
+                                </div>
+                              </div>
+                            ) : (
+                              <div>
+                                <span>Pemasukan <span className="font-bold text-slate-900">Lainnya</span></span>
+                                <span className="text-slate-400 text-[10px] ml-1 font-semibold">({tx.description})</span>
+                              </div>
+                            )
                           ) : (
-                            <span>
-                              Pemasukan <span className="font-bold text-slate-900">Lainnya</span>
-                              <span className="text-slate-400 text-[10px] ml-1 font-semibold">({tx.description})</span>
-                            </span>
+                            <div className="flex items-center gap-2 h-6">
+                              <span>{tx.description}</span>
+                              {tx.photoPath && (
+                                <button
+                                  type="button"
+                                  onClick={() => setActivePhotoUrl(`/${tx.photoPath}`)}
+                                  className="py-0.5 px-1.5 bg-slate-100 hover:bg-indigo-50 border border-slate-200 hover:border-indigo-200 text-slate-500 hover:text-indigo-600 rounded-md text-[9px] font-bold flex items-center gap-0.5 cursor-pointer print:hidden transition-colors"
+                                  title="Lihat Bukti Nota"
+                                >
+                                  <ImageIcon className="w-3 h-3" />
+                                  <span>Bukti</span>
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                      <td className="py-3.5 px-3 text-right font-mono font-bold text-slate-800 align-top">
+                        {tx.type === 'income' ? (
+                          tx.isMerged ? (
+                            <div>
+                              <div className="h-6 flex items-center justify-end font-black text-slate-900">
+                                Rp {tx.amount.toLocaleString('id-ID')}
+                              </div>
+                              <div className="space-y-1.5 mt-1">
+                                {tx.studentPayments.map((p: any, pIdx: number) => (
+                                  <div key={pIdx} className="h-5 flex items-center justify-end text-slate-400 text-[10px] font-bold">
+                                    Rp {p.amount.toLocaleString('id-ID')}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          ) : (
+                            <div>
+                              <div className="h-6 flex items-center justify-end font-black text-slate-900">
+                                Rp {tx.amount.toLocaleString('id-ID')}
+                              </div>
+                              <div className="pl-6 mt-1 text-slate-400 text-[10px] font-bold h-5 flex items-center justify-end">
+                                Rp {tx.amount.toLocaleString('id-ID')}
+                              </div>
+                            </div>
                           )
                         ) : (
-                          <span>{tx.description}</span>
+                          <div className="h-6 flex items-center justify-end font-black text-red-500">
+                            Rp {tx.amount.toLocaleString('id-ID')}
+                          </div>
                         )}
                       </td>
-                      <td className="py-3 px-3 text-right font-mono font-bold text-slate-800">
-                        Rp {tx.amount.toLocaleString('id-ID')}
-                      </td>
-                      <td className="py-3 px-3 text-center print:hidden">
+                      <td className="py-3.5 px-3 text-center print:hidden align-top">
                         <button
-                          onClick={() => handleDelete(tx.id)}
+                          onClick={() => handleDeleteTransaction(tx.ids)}
                           className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
                           title="Hapus Transaksi"
                         >
@@ -624,30 +1081,27 @@ export default function ClassCashManager({
                 })
               )}
             </tbody>
-            {/* Totals in footer */}
+            {/* Table Footer Totals */}
             {filteredTransactions.length > 0 && (
               <tfoot>
                 <tr className="bg-slate-50/70 font-extrabold border-t border-slate-200">
-                  <td colSpan={4} className="py-3.5 px-3 text-right text-slate-500 uppercase tracking-wide">Total Pemasukan Terfilter:</td>
+                  <td colSpan={4} className="py-3.5 px-3 text-right text-slate-500 uppercase tracking-wide">Total Pemasukan:</td>
                   <td className="py-3.5 px-3 text-right text-emerald-600 font-mono">
-                    Rp {filteredTransactions.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0).toLocaleString('id-ID')}
+                    Rp {totalIncome.toLocaleString('id-ID')}
                   </td>
                   <td className="print:hidden"></td>
                 </tr>
                 <tr className="bg-slate-50/70 font-extrabold">
-                  <td colSpan={4} className="py-3.5 px-3 text-right text-slate-500 uppercase tracking-wide">Total Pengeluaran Terfilter:</td>
+                  <td colSpan={4} className="py-3.5 px-3 text-right text-slate-500 uppercase tracking-wide">Total Pengeluaran:</td>
                   <td className="py-3.5 px-3 text-right text-red-500 font-mono">
-                    Rp {filteredTransactions.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0).toLocaleString('id-ID')}
+                    Rp {totalExpense.toLocaleString('id-ID')}
                   </td>
                   <td className="print:hidden"></td>
                 </tr>
                 <tr className="bg-indigo-50/50 font-black border-t-2 border-slate-200">
-                  <td colSpan={4} className="py-4 px-3 text-right text-indigo-900 uppercase tracking-wide">Saldo Terfilter:</td>
+                  <td colSpan={4} className="py-4 px-3 text-right text-indigo-900 uppercase tracking-wide">Saldo Akhir Terfilter:</td>
                   <td className="py-4 px-3 text-right text-indigo-900 font-mono text-sm">
-                    Rp {(
-                      filteredTransactions.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0) -
-                      filteredTransactions.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0)
-                    ).toLocaleString('id-ID')}
+                    Rp {balance.toLocaleString('id-ID')}
                   </td>
                   <td className="print:hidden"></td>
                 </tr>
@@ -656,6 +1110,36 @@ export default function ClassCashManager({
           </table>
         </div>
       </div>
+
+      {/* 6. LIGHTBOX MODAL FOR VIEWING EXPENSE RECEIPT PHOTO */}
+      {activePhotoUrl && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-xs flex items-center justify-center z-50 p-4 animate-fade-in">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-4 relative shadow-2xl space-y-4 animate-scale-up">
+            <button
+              onClick={() => setActivePhotoUrl(null)}
+              className="absolute top-4 right-4 p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-800 rounded-full transition-colors cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
+              <ImageIcon className="w-5 h-5 text-indigo-600" />
+              <span className="font-extrabold text-sm text-slate-850">Lampiran Bukti Nota Pengeluaran</span>
+            </div>
+            <div className="aspect-video w-full rounded-2xl overflow-hidden border border-slate-200 bg-slate-950">
+              <img src={activePhotoUrl} alt="Receipt proof detailed" className="w-full h-full object-contain" />
+            </div>
+            <div className="text-center pt-1.5">
+              <button
+                type="button"
+                onClick={() => setActivePhotoUrl(null)}
+                className="px-6 py-2 bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs rounded-xl shadow-sm transition-all cursor-pointer"
+              >
+                Tutup Pratinjau
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
