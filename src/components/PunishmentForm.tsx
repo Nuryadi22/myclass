@@ -26,6 +26,9 @@ export default function PunishmentForm({ students }: PunishmentFormProps) {
   const [scanError, setScanError] = useState<string | null>(null);
   const [scanStatus, setScanStatus] = useState<string>('Menghubungkan kamera...');
 
+  const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
+  const [selectedDeviceId, setSelectedDeviceId] = useState<string>('');
+
   const lastScannedToken = useRef("");
   const lastScanTime = useRef(0);
   const scannerRef = useRef<any>(null);
@@ -59,6 +62,27 @@ export default function PunishmentForm({ students }: PunishmentFormProps) {
     }
   };
 
+  // Load cameras when scanning starts
+  useEffect(() => {
+    if (!isScanning) return;
+    async function getCameras() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        stream.getTracks().forEach(t => t.stop());
+        
+        const allDevices = await navigator.mediaDevices.enumerateDevices();
+        const videoDevices = allDevices.filter(d => d.kind === 'videoinput');
+        setDevices(videoDevices);
+        if (videoDevices.length > 0 && !selectedDeviceId) {
+          setSelectedDeviceId(videoDevices[0].deviceId);
+        }
+      } catch (err) {
+        console.error('Error listing cameras:', err);
+      }
+    }
+    getCameras();
+  }, [isScanning]);
+
   useEffect(() => {
     if (!isScanning) {
       if (scannerRef.current) {
@@ -78,6 +102,8 @@ export default function PunishmentForm({ students }: PunishmentFormProps) {
 
     setScanStatus('Menghubungkan kamera...');
 
+    let html5QrCode: any = null;
+
     import('html5-qrcode')
       .then((module) => {
         // Stop any existing instance
@@ -87,7 +113,7 @@ export default function PunishmentForm({ students }: PunishmentFormProps) {
           } catch(e){}
         }
 
-        const html5QrCode = new module.Html5Qrcode('punish-qr-reader');
+        html5QrCode = new module.Html5Qrcode('punish-qr-reader');
         scannerRef.current = html5QrCode;
 
         const onScanSuccess = (decodedText: string) => {
@@ -120,8 +146,10 @@ export default function PunishmentForm({ students }: PunishmentFormProps) {
           // Silent continuous failure is fine
         };
 
+        const cameraTarget = selectedDeviceId ? selectedDeviceId : { facingMode: 'environment' };
+
         html5QrCode.start(
-          { facingMode: 'environment' },
+          cameraTarget,
           {
             fps: 15,
             qrbox: { width: 250, height: 250 },
@@ -141,17 +169,15 @@ export default function PunishmentForm({ students }: PunishmentFormProps) {
       });
 
     return () => {
-      if (scannerRef.current) {
+      if (html5QrCode) {
         try {
-          const scannerToStop = scannerRef.current;
-          scannerRef.current = null;
-          scannerToStop.stop().catch((e: any) => console.log('Clean up stop error:', e));
+          html5QrCode.stop().catch((e: any) => console.log('Clean up stop error:', e));
         } catch (e) {
           // ignore
         }
       }
     };
-  }, [isScanning, students]);
+  }, [isScanning, selectedDeviceId, students]);
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -241,6 +267,27 @@ export default function PunishmentForm({ students }: PunishmentFormProps) {
             </div>
           ) : isScanning ? (
             <div className="space-y-3">
+              {/* Camera Selector Dropdown */}
+              {devices.length > 1 && (
+                <div className="max-w-xs mx-auto text-left">
+                  <label htmlFor="punish-camera-select" className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">
+                    Pilih Kamera
+                  </label>
+                  <select
+                    id="punish-camera-select"
+                    value={selectedDeviceId}
+                    onChange={(e) => setSelectedDeviceId(e.target.value)}
+                    className="block w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-800 text-xs font-semibold cursor-pointer"
+                  >
+                    {devices.map((device, idx) => (
+                      <option key={device.deviceId} value={device.deviceId}>
+                        {device.label || `Kamera ${idx + 1}`}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
               <div className="w-full aspect-square bg-slate-900 rounded-2xl overflow-hidden relative border border-slate-100 shadow-sm max-w-xs mx-auto group">
                 <div id="punish-qr-reader" className="w-full h-full" />
                 

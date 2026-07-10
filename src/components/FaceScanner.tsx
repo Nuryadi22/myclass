@@ -138,6 +138,8 @@ export default function FaceScanner({ students }: FaceScannerProps) {
       .then((module) => {
         html5QrCode = new module.Html5Qrcode('qr-reader');
 
+        const cameraTarget = selectedDeviceId ? selectedDeviceId : { facingMode: 'user' };
+
         const onScanSuccess = async (decodedText: string) => {
           try {
             await html5QrCode.stop();
@@ -161,7 +163,7 @@ export default function FaceScanner({ students }: FaceScannerProps) {
               setStatusMsg(null);
               if (document.getElementById('qr-reader') && html5QrCode) {
                 html5QrCode.start(
-                  { facingMode: 'user' },
+                  cameraTarget,
                   {
                     fps: 10,
                     aspectRatio: 1.0,
@@ -184,7 +186,7 @@ export default function FaceScanner({ students }: FaceScannerProps) {
 
         // Start scanning automatically on user camera
         html5QrCode.start(
-          { facingMode: 'user' },
+          cameraTarget,
           {
             fps: 10,
             aspectRatio: 1.0,
@@ -215,7 +217,7 @@ export default function FaceScanner({ students }: FaceScannerProps) {
         }
       }
     };
-  }, [activeTab]);
+  }, [activeTab, selectedDeviceId]);
 
   // Premium Canvas overlay animation
   useEffect(() => {
@@ -733,6 +735,28 @@ export default function FaceScanner({ students }: FaceScannerProps) {
             <h3 className="font-extrabold text-slate-850 text-base">Absensi Scan QR Code</h3>
             <p className="text-xs text-slate-400 font-semibold mt-1">Arahkan kartu QR Code murid ke kamera.</p>
           </div>
+
+          {/* Camera Selectors for QR Tab */}
+          {devices.length > 1 && (
+            <div className="text-left max-w-xs mx-auto">
+              <label htmlFor="qr-camera-select" className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">
+                Pilih Kamera
+              </label>
+              <select
+                id="qr-camera-select"
+                value={selectedDeviceId}
+                onChange={(e) => setSelectedDeviceId(e.target.value)}
+                className="block w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-800 text-xs font-semibold cursor-pointer"
+              >
+                {devices.map((device, idx) => (
+                  <option key={device.deviceId} value={device.deviceId}>
+                    {device.label || `Kamera ${idx + 1}`}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           <div className="w-full aspect-square bg-slate-900 rounded-2xl overflow-hidden shadow-lg border border-slate-100 relative group">
             <div id="qr-reader" className="w-full h-full" />
             
