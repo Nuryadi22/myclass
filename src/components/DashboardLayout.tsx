@@ -1,9 +1,10 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useTransition } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { logoutAction } from '@/app/actions/auth';
+import ConfirmModal from './ConfirmModal';
 import {
   LayoutDashboard,
   Users,
@@ -178,9 +179,14 @@ export default function DashboardLayout({ user, children, childName }: Dashboard
 
   const navLinks = getNavLinks();
 
-  const handleLogout = async (e: React.FormEvent) => {
-    e.preventDefault();
-    await logoutAction();
+  const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState(false);
+  const [isLoggingOut, startLogoutTransition] = useTransition();
+
+  const handleConfirmLogout = () => {
+    setIsLogoutConfirmOpen(false);
+    startLogoutTransition(async () => {
+      await logoutAction();
+    });
   };
 
   const renderNavLinks = () => {
@@ -264,16 +270,15 @@ export default function DashboardLayout({ user, children, childName }: Dashboard
             </div>
           </div>
 
-          {/* Logout Form Button */}
-          <form onSubmit={handleLogout} className="inline">
-            <button
-              type="submit"
-              className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
-              title="Keluar"
-            >
-              <LogOut className="w-5 h-5" />
-            </button>
-          </form>
+          {/* Logout Button */}
+          <button
+            onClick={() => setIsLogoutConfirmOpen(true)}
+            className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+            title="Keluar"
+            disabled={isLoggingOut}
+          >
+            <LogOut className="w-5 h-5" />
+          </button>
         </div>
       </header>
 
@@ -322,6 +327,18 @@ export default function DashboardLayout({ user, children, childName }: Dashboard
           {children}
         </main>
       </div>
+
+      <ConfirmModal
+        isOpen={isLogoutConfirmOpen}
+        onClose={() => setIsLogoutConfirmOpen(false)}
+        onConfirm={handleConfirmLogout}
+        title="Konfirmasi Keluar"
+        message="Apakah Anda yakin ingin keluar dari aplikasi MyClass?"
+        confirmText="Keluar"
+        cancelText="Batal"
+        type="info"
+        isPending={isLoggingOut}
+      />
     </div>
   );
 }

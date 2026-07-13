@@ -5,6 +5,7 @@ import { QrCode, User } from 'lucide-react';
 import { getRegisteredFacesAction } from '@/app/actions/teacher';
 import BiometricEnrollButton from '@/components/BiometricEnrollButton';
 import DeleteStudentButton from '@/components/DeleteStudentButton';
+import EditStudentButton from '@/components/EditStudentButton';
 
 export const dynamic = 'force-dynamic';
 
@@ -102,7 +103,10 @@ export default async function TeacherStudentsPage() {
                           </div>
                         </td>
                         <td className="py-3.5 px-3 text-center">
-                          <DeleteStudentButton studentId={student.id} studentName={student.name} />
+                          <div className="flex items-center justify-center gap-1.5">
+                            <EditStudentButton student={student} />
+                            <DeleteStudentButton studentId={student.id} studentName={student.name} />
+                          </div>
                         </td>
                       </tr>
                     );

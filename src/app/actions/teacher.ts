@@ -947,5 +947,81 @@ export async function deleteClassBillAction(billId: number) {
   }
 }
 
+// 10. Update Student Details
+export async function updateStudentAction(
+  id: number,
+  name: string,
+  studentId: string,
+  parentName: string
+) {
+  const session = await getSession();
+  if (!session || session.role !== 'teacher') {
+    return { error: 'Akses ditolak.' };
+  }
+
+  if (!name || !studentId || !parentName) {
+    return { error: 'Semua kolom wajib diisi.' };
+  }
+
+  try {
+    const student = await prisma.student.findUnique({
+      where: { id },
+      include: { parent: true },
+    });
+
+    if (!student) {
+      return { error: 'Murid tidak ditemukan.' };
+    }
+
+    // Check if new studentId (NISN) is already used by another student
+    if (studentId.trim() !== student.studentId) {
+      const existingStudent = await prisma.student.findUnique({
+        where: { studentId: studentId.trim() },
+      });
+      if (existingStudent) {
+        return { error: 'NISN Murid sudah terdaftar.' };
+      }
+    }
+
+    // Update parent
+    if (student.parentId) {
+      // Check if another user has the new username (excluding the current parent)
+      if (studentId.trim() !== student.parent?.username) {
+        const existingUser = await prisma.user.findUnique({
+          where: { username: studentId.trim() },
+        });
+        if (existingUser && existingUser.id !== student.parentId) {
+          return { error: 'Username / NISN ini sudah terdaftar untuk pengguna lain.' };
+        }
+      }
+
+      await prisma.user.update({
+        where: { id: student.parentId },
+        data: {
+          name: parentName.trim(),
+          username: studentId.trim(),
+        },
+      });
+    }
+
+    // Update student
+    await prisma.student.update({
+      where: { id },
+      data: {
+        name: name.trim(),
+        studentId: studentId.trim(),
+      },
+    });
+
+    revalidatePath('/teacher/students');
+    revalidatePath('/teacher/dashboard');
+    revalidatePath('/teacher/scan');
+    return { success: true, message: 'Data murid berhasil diperbarui.' };
+  } catch (error: any) {
+    console.error('Update student error:', error);
+    return { error: 'Gagal memperbarui data murid. Silakan coba lagi.' };
+  }
+}
+
 
 
