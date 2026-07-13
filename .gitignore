@@ -51,3 +51,8 @@ next-env.d.ts
 
 # Local Laravel backup
 /laravel-backup
+
+# Face registration and assets
+/public/faces/*
+!/public/faces/.keep
+!/public/faces/.gitkeep

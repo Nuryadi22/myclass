@@ -1005,7 +1005,7 @@ export default function FaceScanner({ students }: FaceScannerProps) {
                         <span className="block text-[10px] text-slate-400 font-bold uppercase tracking-wider text-center">Database Biometrics</span>
                         <div className="aspect-square bg-slate-100 rounded-2xl overflow-hidden border border-slate-200/60 shadow-inner flex items-center justify-center">
                           <img
-                            src={`/faces/${matchedStudent.studentId}.jpg`}
+                            src={`/api/faces/${matchedStudent.studentId}`}
                             alt={matchedStudent.name}
                             onError={(e) => {
                               (e.target as HTMLImageElement).src = '/logo-myclass.png'; // Fallback to class logo

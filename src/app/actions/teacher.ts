@@ -69,6 +69,12 @@ export async function storeStudentAction(prevState: any, formData: FormData) {
     const qrCodeToken = generateQrToken();
     const className = session.className || 'Tanpa Kelas';
 
+    const faceImage = formData.get('face_image') as string | null;
+    let savedFaceImage: string | null = null;
+    if (faceImage && faceImage.startsWith('data:image')) {
+      savedFaceImage = faceImage;
+    }
+
     await prisma.student.create({
       data: {
         name: name.trim(),
@@ -77,18 +83,9 @@ export async function storeStudentAction(prevState: any, formData: FormData) {
         parentId: parent.id,
         qrCodeToken: qrCodeToken,
         totalPoints: 0,
+        faceImage: savedFaceImage,
       },
     });
-
-    const faceImage = formData.get('face_image') as string | null;
-    if (faceImage && faceImage.startsWith('data:image')) {
-      const base64Data = faceImage.replace(/^data:image\/\w+;base64,/, '');
-      const buffer = Buffer.from(base64Data, 'base64');
-      const uploadDir = join(process.cwd(), 'public', 'faces');
-      await mkdir(uploadDir, { recursive: true });
-      const filePath = join(uploadDir, `${studentId.trim()}.jpg`);
-      await writeFile(filePath, buffer);
-    }
 
     revalidatePath('/teacher/students');
     return {
@@ -750,17 +747,15 @@ export async function registerStudentFaceAction(studentId: string, imageBase64: 
   }
 
   try {
-    const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, '');
-    const buffer = Buffer.from(base64Data, 'base64');
-
-    const uploadDir = join(process.cwd(), 'public', 'faces');
-    await mkdir(uploadDir, { recursive: true });
-
-    const filePath = join(uploadDir, `${studentId.trim()}.jpg`);
-    await writeFile(filePath, buffer);
+    // Save/update the faceImage field in database instead of file system
+    await prisma.student.update({
+      where: { studentId: studentId.trim() },
+      data: { faceImage: imageBase64 },
+    });
 
     revalidatePath('/teacher/dashboard');
     revalidatePath('/teacher/scan');
+    revalidatePath('/teacher/students');
     return { success: true, message: 'Wajah murid berhasil didaftarkan.' };
   } catch (error: any) {
     console.error('Register face error:', error);
@@ -776,13 +771,19 @@ export async function getRegisteredFacesAction() {
   }
 
   try {
-    const dirPath = join(process.cwd(), 'public', 'faces');
-    await mkdir(dirPath, { recursive: true }); // Ensure it exists
-    const files = await readdir(dirPath);
-    // Filter only .jpg files and map to student IDs (filename without extension)
-    const studentIds = files
-      .filter((file) => file.endsWith('.jpg'))
-      .map((file) => file.replace('.jpg', ''));
+    // Query database for students that have faceImage stored
+    const students = await prisma.student.findMany({
+      where: {
+        faceImage: {
+          not: null,
+        },
+      },
+      select: {
+        studentId: true,
+      },
+    });
+
+    const studentIds = students.map((s) => s.studentId);
     return { success: true, studentIds };
   } catch (error: any) {
     console.error('Get registered faces error:', error);

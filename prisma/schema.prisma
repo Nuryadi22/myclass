@@ -41,6 +41,7 @@ model Student {
   className     String
   qrCodeToken   String       @unique
   totalPoints   Int          @default(0)
+  faceImage     String?      // Gambar wajah (Base64)
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
 
