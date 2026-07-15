@@ -767,7 +767,7 @@ export async function registerStudentFaceAction(studentId: string, imageBase64: 
 export async function getRegisteredFacesAction() {
   const session = await getSession();
   if (!session || session.role !== 'teacher') {
-    return { error: 'Akses ditolak.', studentIds: [] };
+    return { error: 'Akses ditolak.', studentIds: [], registeredStudents: [] };
   }
 
   try {
@@ -780,14 +780,19 @@ export async function getRegisteredFacesAction() {
       },
       select: {
         studentId: true,
+        faceImage: true,
       },
     });
 
     const studentIds = students.map((s) => s.studentId);
-    return { success: true, studentIds };
+    return { 
+      success: true, 
+      studentIds, 
+      registeredStudents: students as { studentId: string; faceImage: string }[] 
+    };
   } catch (error: any) {
     console.error('Get registered faces error:', error);
-    return { success: false, studentIds: [] };
+    return { success: false, studentIds: [], registeredStudents: [] };
   }
 }
 

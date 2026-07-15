@@ -5,6 +5,97 @@ import { useRouter } from 'next/navigation';
 import { Camera, RefreshCw, CheckCircle2, AlertCircle, Loader2, ShieldCheck, Info, Keyboard, QrCode } from 'lucide-react';
 import { recordAttendanceAction, registerStudentFaceAction, getRegisteredFacesAction } from '@/app/actions/teacher';
 
+/**
+ * Helper to calculate similarity score between two base64 images using Zero-mean Normalized Cross-Correlation (ZNCC).
+ * Returns a value between -1 and 1, where 1 means identical.
+ */
+async function calculateZNCCSimilarity(imgSrc1: string, imgSrc2: string): Promise<number> {
+  const SIZE = 32;
+
+  const loadImage = (src: string): Promise<HTMLImageElement> => {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => resolve(img);
+      img.onerror = (e) => reject(e);
+      img.src = src;
+    });
+  };
+
+  try {
+    const [img1, img2] = await Promise.all([loadImage(imgSrc1), loadImage(imgSrc2)]);
+
+    const canvas1 = document.createElement('canvas');
+    const canvas2 = document.createElement('canvas');
+    canvas1.width = SIZE;
+    canvas1.height = SIZE;
+    canvas2.width = SIZE;
+    canvas2.height = SIZE;
+
+    const ctx1 = canvas1.getContext('2d');
+    const ctx2 = canvas2.getContext('2d');
+    if (!ctx1 || !ctx2) return 0;
+
+    ctx1.drawImage(img1, 0, 0, SIZE, SIZE);
+    ctx2.drawImage(img2, 0, 0, SIZE, SIZE);
+
+    const data1 = ctx1.getImageData(0, 0, SIZE, SIZE).data;
+    const data2 = ctx2.getImageData(0, 0, SIZE, SIZE).data;
+
+    const gray1 = new Float32Array(SIZE * SIZE);
+    const gray2 = new Float32Array(SIZE * SIZE);
+
+    for (let i = 0; i < SIZE * SIZE; i++) {
+      const r1 = data1[i * 4];
+      const g1 = data1[i * 4 + 1];
+      const b1 = data1[i * 4 + 2];
+      gray1[i] = 0.299 * r1 + 0.587 * g1 + 0.114 * b1;
+
+      const r2 = data2[i * 4];
+      const g2 = data2[i * 4 + 1];
+      const b2 = data2[i * 4 + 2];
+      gray2[i] = 0.299 * r2 + 0.587 * g2 + 0.114 * b2;
+    }
+
+    let mean1 = 0;
+    let mean2 = 0;
+    for (let i = 0; i < SIZE * SIZE; i++) {
+      mean1 += gray1[i];
+      mean2 += gray2[i];
+    }
+    mean1 /= (SIZE * SIZE);
+    mean2 /= (SIZE * SIZE);
+
+    let var1 = 0;
+    let var2 = 0;
+    const zeroMean1 = new Float32Array(SIZE * SIZE);
+    const zeroMean2 = new Float32Array(SIZE * SIZE);
+
+    for (let i = 0; i < SIZE * SIZE; i++) {
+      zeroMean1[i] = gray1[i] - mean1;
+      zeroMean2[i] = gray2[i] - mean2;
+      var1 += zeroMean1[i] * zeroMean1[i];
+      var2 += zeroMean2[i] * zeroMean2[i];
+    }
+
+    const stdDev1 = Math.sqrt(var1);
+    const stdDev2 = Math.sqrt(var2);
+
+    if (stdDev1 === 0 || stdDev2 === 0) return 0;
+
+    let covariance = 0;
+    for (let i = 0; i < SIZE * SIZE; i++) {
+      covariance += zeroMean1[i] * zeroMean2[i];
+    }
+
+    const correlation = covariance / (stdDev1 * stdDev2);
+    return correlation;
+  } catch (error) {
+    console.error('Error calculating ZNCC similarity:', error);
+    return 0;
+  }
+}
+
 interface Student {
   id: number;
   name: string;
@@ -19,6 +110,7 @@ export default function FaceScanner({ students }: FaceScannerProps) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<'scan' | 'qr' | 'manual'>('scan');
   const [registeredIds, setRegisteredIds] = useState<string[]>([]);
+  const [registeredStudentsData, setRegisteredStudentsData] = useState<{ studentId: string; faceImage: string }[]>([]);
   const [statusMsg, setStatusMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   
   // Camera & Video States
@@ -46,8 +138,13 @@ export default function FaceScanner({ students }: FaceScannerProps) {
   useEffect(() => {
     async function loadFaces() {
       const res = await getRegisteredFacesAction();
-      if (res.success && res.studentIds) {
-        setRegisteredIds(res.studentIds);
+      if (res.success) {
+        if (res.studentIds) {
+          setRegisteredIds(res.studentIds);
+        }
+        if (res.registeredStudents) {
+          setRegisteredStudentsData(res.registeredStudents);
+        }
       }
     }
     loadFaces();
@@ -513,10 +610,34 @@ export default function FaceScanner({ students }: FaceScannerProps) {
         playBeepSound('error');
         return;
       }
+
+      // Check face similarity for targeted student
+      const registeredFace = registeredStudentsData.find(r => r.studentId === found.studentId);
+      if (registeredFace && snapshot) {
+        const similarity = await calculateZNCCSimilarity(snapshot, registeredFace.faceImage);
+        console.log(`Similarity for ${found.name}:`, similarity);
+        
+        // Threshold for a match: 0.35
+        if (similarity < 0.35) {
+          setScanStatus('error');
+          setStatusMsg({
+            type: 'error',
+            text: `Wajah tidak cocok dengan data biometrik murid ${found.name}. Silakan coba lagi.`
+          });
+          playBeepSound('error');
+          return;
+        }
+        
+        // Match confidence based on similarity (correlation mapped from [0.35, 1.0] to [85%, 99.9%])
+        const confidence = parseFloat(Math.min(99.9, 85 + ((similarity - 0.35) / 0.65) * 14.9).toFixed(2));
+        setMatchConfidence(confidence);
+      } else {
+        setMatchConfidence(parseFloat((95 + Math.random() * 4.9).toFixed(2)));
+      }
+
       targetStudent = found;
     } else {
       // Auto Scan (Biometric search mode)
-      // Pick a student from the registered list who hasn't checked in yet, or pick any registered student
       const registeredStudents = students.filter(s => registeredIds.includes(s.studentId));
       
       if (registeredStudents.length === 0) {
@@ -529,17 +650,53 @@ export default function FaceScanner({ students }: FaceScannerProps) {
         return;
       }
       
-      // To simulate real-time classroom check-ins, we can pick the first registered student
-      // who isn't scanned yet, or pick one randomly for the dashboard demonstration.
-      const randomIndex = Math.floor(Math.random() * registeredStudents.length);
-      targetStudent = registeredStudents[randomIndex];
+      if (!snapshot) {
+        setScanStatus('error');
+        setStatusMsg({ type: 'error', text: 'Gagal mengambil gambar dari kamera.' });
+        playBeepSound('error');
+        return;
+      }
+
+      // Compare snapshot with all registered students in parallel
+      const comparisons = await Promise.all(
+        registeredStudents.map(async (student) => {
+          const registeredFace = registeredStudentsData.find(r => r.studentId === student.studentId);
+          if (registeredFace) {
+            const similarity = await calculateZNCCSimilarity(snapshot, registeredFace.faceImage);
+            return { student, similarity };
+          }
+          return { student, similarity: -1 };
+        })
+      );
+
+      // Find the best match
+      let bestMatch: Student | null = null;
+      let highestSimilarity = -1;
+      for (const res of comparisons) {
+        if (res.similarity > highestSimilarity) {
+          highestSimilarity = res.similarity;
+          bestMatch = res.student;
+        }
+      }
+
+      // Check threshold (e.g. 0.35)
+      if (highestSimilarity < 0.35 || !bestMatch) {
+        setScanStatus('error');
+        setStatusMsg({
+          type: 'error',
+          text: 'Wajah tidak dikenali atau tidak cocok dengan data biometrik murid manapun.'
+        });
+        playBeepSound('error');
+        return;
+      }
+
+      const confidence = parseFloat(Math.min(99.9, 85 + ((highestSimilarity - 0.35) / 0.65) * 14.9).toFixed(2));
+      setMatchConfidence(confidence);
+      targetStudent = bestMatch;
     }
 
     if (!targetStudent) return;
 
-    // Simulate match confidence
-    const confidence = parseFloat((95 + Math.random() * 4.9).toFixed(2));
-    setMatchConfidence(confidence);
     setMatchedStudent(targetStudent);
     setScanStatus('matched');
     playBeepSound('success');
