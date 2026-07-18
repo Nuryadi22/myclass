@@ -33,3 +33,10 @@ body {
   }
 }
 
+/* Disable mirroring for all HTML5 QR Code scanners */
+#qr-reader video,
+#punish-qr-reader video,
+#poinku-qr-reader video {
+  transform: none !important;
+}
+

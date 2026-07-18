@@ -195,7 +195,7 @@ export default function StudentForm() {
                       autoPlay
                       playsInline
                       muted
-                      className="w-full h-full object-cover scale-x-[-1]"
+                      className="w-full h-full object-cover"
                     />
                     <div className="absolute inset-2 border-2 border-indigo-500/50 border-dashed rounded-lg pointer-events-none"></div>
                   </div>

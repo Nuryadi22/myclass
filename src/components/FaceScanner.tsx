@@ -943,6 +943,7 @@ export default function FaceScanner({ students }: FaceScannerProps) {
                 width: 100% !important;
                 height: 100% !important;
                 object-fit: cover !important;
+                transform: none !important;
               }
               @keyframes scan {
                 0% { top: 10%; }
@@ -1011,7 +1012,7 @@ export default function FaceScanner({ students }: FaceScannerProps) {
                 autoPlay
                 playsInline
                 muted
-                className="w-full h-full object-cover scale-x-[-1]"
+                className="w-full h-full object-cover"
               />
               <canvas
                 ref={canvasRef}

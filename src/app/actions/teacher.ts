@@ -657,21 +657,10 @@ export async function storeCashTransactionAction(prevState: any, formData: FormD
       if (photoFile && photoFile.size > 0) {
         const bytes = await photoFile.arrayBuffer();
         const buffer = Buffer.from(bytes);
-        const filename = `${Date.now()}_${photoFile.name.replace(/\s+/g, '_')}`;
-        const uploadDir = join(process.cwd(), 'public', 'expenses');
-        await mkdir(uploadDir, { recursive: true });
-        const filePath = join(uploadDir, filename);
-        await writeFile(filePath, buffer);
-        photoPath = `expenses/${filename}`;
+        const base64 = buffer.toString('base64');
+        photoPath = `data:${photoFile.type};base64,${base64}`;
       } else if (photoBase64 && photoBase64.startsWith('data:image')) {
-        const base64Data = photoBase64.replace(/^data:image\/\w+;base64,/, '');
-        const buffer = Buffer.from(base64Data, 'base64');
-        const filename = `expense_${Date.now()}.jpg`;
-        const uploadDir = join(process.cwd(), 'public', 'expenses');
-        await mkdir(uploadDir, { recursive: true });
-        const filePath = join(uploadDir, filename);
-        await writeFile(filePath, buffer);
-        photoPath = `expenses/${filename}`;
+        photoPath = photoBase64;
       }
     }
 
@@ -714,7 +703,7 @@ export async function deleteCashTransactionAction(transactionId: number) {
       return { error: 'Akses ditolak. Transaksi ini bukan milik kelas Anda.' };
     }
 
-    if (transaction.photoPath) {
+    if (transaction.photoPath && !transaction.photoPath.startsWith('data:image')) {
       try {
         const filePath = join(process.cwd(), 'public', transaction.photoPath);
         await unlink(filePath);

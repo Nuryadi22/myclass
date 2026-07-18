@@ -183,7 +183,7 @@ export default function BiometricEnrollButton({
                       autoPlay
                       playsInline
                       muted
-                      className="w-full h-full object-cover scale-x-[-1]"
+                      className="w-full h-full object-cover"
                     />
                     {/* Guides */}
                     <div className="absolute inset-4 border-2 border-indigo-500/50 border-dashed rounded-full pointer-events-none"></div>
