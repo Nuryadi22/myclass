@@ -1024,12 +1024,17 @@ export default function ClassCashManager({
                               {tx.photoPath && (
                                 <button
                                   type="button"
-                                  onClick={() => setActivePhotoUrl(tx.photoPath.startsWith('data:image') ? tx.photoPath : `/${tx.photoPath}`)}
-                                  className="py-0.5 px-1.5 bg-slate-100 hover:bg-indigo-50 border border-slate-200 hover:border-indigo-200 text-slate-500 hover:text-indigo-600 rounded-md text-[9px] font-bold flex items-center gap-0.5 cursor-pointer print:hidden transition-colors"
+                                  onClick={() => {
+                                    const src = tx.photoPath!.startsWith('data:image')
+                                      ? tx.photoPath!
+                                      : (tx.photoPath!.startsWith('/') ? tx.photoPath! : `/${tx.photoPath!}`);
+                                    setActivePhotoUrl(src);
+                                  }}
+                                  className="py-0.5 px-1.5 bg-slate-100 hover:bg-indigo-50 border border-slate-200 hover:border-indigo-200 text-slate-500 hover:text-indigo-600 rounded-md text-[9px] font-bold flex items-center gap-1 cursor-pointer print:hidden transition-colors"
                                   title="Lihat Bukti Nota"
                                 >
-                                  <ImageIcon className="w-3 h-3" />
-                                  <span>Bukti</span>
+                                  <ImageIcon className="w-3 h-3 text-indigo-600" />
+                                  <span>Bukti Nota</span>
                                 </button>
                               )}
                             </div>

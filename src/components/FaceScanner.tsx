@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { Camera, RefreshCw, CheckCircle2, AlertCircle, Loader2, ShieldCheck, Info, Keyboard, QrCode } from 'lucide-react';
+import { Camera, RefreshCw, CheckCircle2, AlertCircle, Loader2, ShieldCheck, Info, Keyboard, QrCode, Search, Clock } from 'lucide-react';
 import { recordAttendanceAction, registerStudentFaceAction, getRegisteredFacesAction } from '@/app/actions/teacher';
 
 /**
@@ -102,16 +102,30 @@ interface Student {
   studentId: string;
 }
 
-interface FaceScannerProps {
-  students: Student[];
+export interface TodayAttendanceItem {
+  id: number;
+  studentId: number;
+  studentName: string;
+  studentNisn: string;
+  className: string;
+  totalPoints: number;
+  time: string;
+  status: string;
+  scannedByName: string | null;
 }
 
-export default function FaceScanner({ students }: FaceScannerProps) {
+interface FaceScannerProps {
+  students: Student[];
+  todayAttendances?: TodayAttendanceItem[];
+}
+
+export default function FaceScanner({ students, todayAttendances = [] }: FaceScannerProps) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<'scan' | 'qr' | 'manual'>('scan');
   const [registeredIds, setRegisteredIds] = useState<string[]>([]);
   const [registeredStudentsData, setRegisteredStudentsData] = useState<{ studentId: string; faceImage: string }[]>([]);
   const [statusMsg, setStatusMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [logSearchQuery, setLogSearchQuery] = useState('');
   
   // Camera & Video States
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -1218,6 +1232,144 @@ export default function FaceScanner({ students }: FaceScannerProps) {
       )}
       </>
       )}
+      {/* LOG AKTIVITAS ABSENSI HARI INI */}
+      <div className="bg-white rounded-3xl border border-slate-100 p-6 space-y-6 shadow-xs animate-fade-in mt-8">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4">
+          <div>
+            <h3 className="font-extrabold text-slate-850 text-lg flex items-center gap-2">
+              <Clock className="w-5 h-5 text-indigo-600" />
+              <span>Log Aktivitas Absensi Hari Ini</span>
+            </h3>
+            <p className="text-xs text-slate-400 font-semibold mt-0.5">
+              Catatan riwayat absensi yang telah berhasil tercatat pada hari ini.
+            </p>
+          </div>
+
+          {/* Search Filter input */}
+          <div className="relative w-full sm:w-64">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              placeholder="Cari nama atau NISN..."
+              value={logSearchQuery}
+              onChange={(e) => setLogSearchQuery(e.target.value)}
+              className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-800 focus:bg-white transition-all"
+            />
+          </div>
+        </div>
+
+        {/* Summary Cards */}
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+          <div className="p-3.5 bg-slate-50 border border-slate-100 rounded-2xl">
+            <span className="text-[9px] font-extrabold uppercase text-slate-400 block tracking-wider">Total Scanned</span>
+            <span className="text-xl font-extrabold text-slate-800 mt-0.5 block">{todayAttendances.length} <span className="text-xs text-slate-400 font-bold">Siswa</span></span>
+          </div>
+          <div className="p-3.5 bg-emerald-50/70 border border-emerald-100 rounded-2xl">
+            <span className="text-[9px] font-extrabold uppercase text-emerald-600 block tracking-wider">Hadir</span>
+            <span className="text-xl font-extrabold text-emerald-800 mt-0.5 block">{todayAttendances.filter(l => l.status === 'present').length} <span className="text-xs text-emerald-600 font-bold">Siswa</span></span>
+          </div>
+          <div className="p-3.5 bg-amber-50/70 border border-amber-100 rounded-2xl">
+            <span className="text-[9px] font-extrabold uppercase text-amber-600 block tracking-wider">Terlambat</span>
+            <span className="text-xl font-extrabold text-amber-800 mt-0.5 block">{todayAttendances.filter(l => l.status === 'late').length} <span className="text-xs text-amber-600 font-bold">Siswa</span></span>
+          </div>
+          <div className="p-3.5 bg-blue-50/70 border border-blue-100 rounded-2xl">
+            <span className="text-[9px] font-extrabold uppercase text-blue-600 block tracking-wider">Sakit / Izin</span>
+            <span className="text-xl font-extrabold text-blue-800 mt-0.5 block">{todayAttendances.filter(l => l.status === 'sick' || l.status === 'excused').length} <span className="text-xs text-blue-600 font-bold">Siswa</span></span>
+          </div>
+          <div className="p-3.5 bg-red-50/70 border border-red-100 rounded-2xl col-span-2 sm:col-span-1">
+            <span className="text-[9px] font-extrabold uppercase text-red-600 block tracking-wider">Alfa</span>
+            <span className="text-xl font-extrabold text-red-800 mt-0.5 block">{todayAttendances.filter(l => l.status === 'absent').length} <span className="text-xs text-red-600 font-bold">Siswa</span></span>
+          </div>
+        </div>
+
+        {/* Attendance Log Table */}
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs border-collapse">
+            <thead>
+              <tr className="border-b border-slate-200 text-slate-400 font-bold uppercase tracking-wider bg-slate-50/50">
+                <th className="py-3 px-3">Waktu</th>
+                <th className="py-3 px-3">Murid</th>
+                <th className="py-3 px-3">NISN</th>
+                <th className="py-3 px-3">Status</th>
+                <th className="py-3 px-3 text-center">Poin Terkini</th>
+                <th className="py-3 px-3 text-right">Pencatat</th>
+              </tr>
+            </thead>
+            <tbody className="font-semibold text-slate-700">
+              {todayAttendances
+                .filter((log) => {
+                  if (!logSearchQuery) return true;
+                  const query = logSearchQuery.toLowerCase();
+                  return (
+                    log.studentName.toLowerCase().includes(query) ||
+                    log.studentNisn.toLowerCase().includes(query)
+                  );
+                })
+                .length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="py-12 text-center text-slate-400 font-bold">
+                    {logSearchQuery ? 'Tidak ada data absensi yang cocok dengan pencarian.' : 'Belum ada aktivitas absensi yang masuk pada hari ini.'}
+                  </td>
+                </tr>
+              ) : (
+                todayAttendances
+                  .filter((log) => {
+                    if (!logSearchQuery) return true;
+                    const query = logSearchQuery.toLowerCase();
+                    return (
+                      log.studentName.toLowerCase().includes(query) ||
+                      log.studentNisn.toLowerCase().includes(query)
+                    );
+                  })
+                  .map((log) => {
+                    let statusBadge = 'bg-emerald-50 border-emerald-200 text-emerald-700';
+                    let statusLabel = 'Hadir';
+                    if (log.status === 'late') {
+                      statusBadge = 'bg-amber-50 border-amber-200 text-amber-700';
+                      statusLabel = 'Terlambat';
+                    } else if (log.status === 'sick') {
+                      statusBadge = 'bg-blue-50 border-blue-200 text-blue-700';
+                      statusLabel = 'Sakit';
+                    } else if (log.status === 'excused') {
+                      statusBadge = 'bg-indigo-50 border-indigo-200 text-indigo-700';
+                      statusLabel = 'Izin';
+                    } else if (log.status === 'absent') {
+                      statusBadge = 'bg-red-50 border-red-200 text-red-700';
+                      statusLabel = 'Alfa';
+                    }
+
+                    return (
+                      <tr key={log.id} className="border-b border-slate-100 hover:bg-slate-50/40 transition-colors">
+                        <td className="py-3.5 px-3 font-mono text-slate-800 font-bold whitespace-nowrap">
+                          {log.time ? log.time.substring(0, 5) : '--:--'} WIB
+                        </td>
+                        <td className="py-3.5 px-3">
+                          <span className="font-extrabold text-slate-850">{log.studentName}</span>
+                        </td>
+                        <td className="py-3.5 px-3 font-mono text-slate-500 text-[11px]">
+                          {log.studentNisn}
+                        </td>
+                        <td className="py-3.5 px-3">
+                          <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-extrabold uppercase border ${statusBadge}`}>
+                            {statusLabel}
+                          </span>
+                        </td>
+                        <td className="py-3.5 px-3 text-center">
+                          <span className="px-2.5 py-1 bg-amber-50 border border-amber-200/60 text-amber-800 rounded-xl font-extrabold text-[11px]">
+                            ⭐ {log.totalPoints}
+                          </span>
+                        </td>
+                        <td className="py-3.5 px-3 text-right text-slate-400 text-[11px]">
+                          {log.scannedByName || 'System / Scan'}
+                        </td>
+                      </tr>
+                    );
+                  })
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   );
 }

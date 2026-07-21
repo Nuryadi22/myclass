@@ -184,43 +184,60 @@ export async function recordAttendanceAction(data: {
     if (alreadyChecked) {
       if (data.student_id) {
         // Allow status updates for manual input
-        await prisma.attendance.update({
-          where: { id: alreadyChecked.id },
-          data: {
-            status: status,
-            time: nowTimeStr,
-            scannedById: session.userId,
-          },
+        const oldStatus = alreadyChecked.status;
+
+        await prisma.$transaction(async (tx) => {
+          await tx.attendance.update({
+            where: { id: alreadyChecked.id },
+            data: {
+              status: status,
+              time: nowTimeStr,
+              scannedById: session.userId,
+            },
+          });
+
+          if (oldStatus !== status) {
+            // Revert old points
+            let diff = 0;
+            if (oldStatus === 'present' || oldStatus === 'late') {
+              diff -= 1;
+            } else if (oldStatus === 'absent') {
+              diff += 1;
+            }
+            // Add new points
+            if (status === 'present' || status === 'late') {
+              diff += 1;
+            } else if (status === 'absent') {
+              diff -= 1;
+            }
+
+            if (diff !== 0) {
+              const curStudent = await tx.student.findUnique({
+                where: { id: student.id },
+                select: { totalPoints: true }
+              });
+              const newPoints = Math.max(0, (curStudent?.totalPoints || 0) + diff);
+              await tx.student.update({
+                where: { id: student.id },
+                data: { totalPoints: newPoints }
+              });
+            }
+          }
         });
-
-        if (alreadyChecked.status !== status) {
-          // Revert old points
-          let diff = 0;
-          if (alreadyChecked.status === 'present' || alreadyChecked.status === 'late') {
-            diff -= 1;
-          } else if (alreadyChecked.status === 'absent') {
-            diff += 1;
-          }
-          // Add new points
-          if (status === 'present' || status === 'late') {
-            diff += 1;
-          } else if (status === 'absent') {
-            diff -= 1;
-          }
-
-          if (diff !== 0) {
-            await prisma.student.update({
-              where: { id: student.id },
-              data: { totalPoints: { increment: diff } }
-            });
-          }
-        }
 
         let label = 'Hadir';
         if (status === 'sick') label = 'Sakit';
         else if (status === 'excused') label = 'Izin';
         else if (status === 'absent') label = 'Alfa';
         else if (status === 'late') label = 'Terlambat';
+
+        revalidatePath('/teacher/dashboard');
+        revalidatePath('/teacher/scan');
+        revalidatePath('/teacher/students');
+        revalidatePath('/teacher/reports');
+        revalidatePath(`/teacher/reports/${student.id}`);
+        revalidatePath('/parent/dashboard');
+        revalidatePath('/parent/reports');
 
         return {
           success: true,
@@ -237,17 +254,7 @@ export async function recordAttendanceAction(data: {
       };
     }
 
-    // Create new attendance
-    await prisma.attendance.create({
-      data: {
-        studentId: student.id,
-        date: todayStr,
-        time: nowTimeStr,
-        status: status,
-        scannedById: session.userId,
-      },
-    });
-
+    // Create new attendance atomically
     let diff = 0;
     if (status === 'present' || status === 'late') {
       diff += 1;
@@ -255,12 +262,29 @@ export async function recordAttendanceAction(data: {
       diff -= 1;
     }
 
-    if (diff !== 0) {
-      await prisma.student.update({
-        where: { id: student.id },
-        data: { totalPoints: { increment: diff } }
+    await prisma.$transaction(async (tx) => {
+      await tx.attendance.create({
+        data: {
+          studentId: student.id,
+          date: todayStr,
+          time: nowTimeStr,
+          status: status,
+          scannedById: session.userId,
+        },
       });
-    }
+
+      if (diff !== 0) {
+        const curStudent = await tx.student.findUnique({
+          where: { id: student.id },
+          select: { totalPoints: true }
+        });
+        const newPoints = Math.max(0, (curStudent?.totalPoints || 0) + diff);
+        await tx.student.update({
+          where: { id: student.id },
+          data: { totalPoints: newPoints }
+        });
+      }
+    });
 
     let label = 'Hadir';
     if (status === 'sick') label = 'Sakit';
@@ -269,6 +293,13 @@ export async function recordAttendanceAction(data: {
     else if (status === 'late') label = 'Terlambat';
 
     revalidatePath('/teacher/dashboard');
+    revalidatePath('/teacher/scan');
+    revalidatePath('/teacher/students');
+    revalidatePath('/teacher/reports');
+    revalidatePath(`/teacher/reports/${student.id}`);
+    revalidatePath('/parent/dashboard');
+    revalidatePath('/parent/reports');
+
     return {
       success: true,
       message: `Absensi berhasil direkam untuk ${student.name} (${label}).`,
@@ -576,6 +607,7 @@ export async function approveOrRejectAttendanceAction(requestId: number, statusA
         });
 
         if (existingAttendance) {
+          const oldStatus = existingAttendance.status;
           await tx.attendance.update({
             where: { id: existingAttendance.id },
             data: {
@@ -584,6 +616,26 @@ export async function approveOrRejectAttendanceAction(requestId: number, statusA
               scannedById: session.userId
             }
           });
+
+          // Adjust points if status changed
+          let diff = 0;
+          if (oldStatus === 'present' || oldStatus === 'late') diff -= 1;
+          else if (oldStatus === 'absent') diff += 1;
+
+          if (request.status === 'present' || request.status === 'late') diff += 1;
+          else if (request.status === 'absent') diff -= 1;
+
+          if (diff !== 0) {
+            const curStudent = await tx.student.findUnique({
+              where: { id: request.studentId },
+              select: { totalPoints: true }
+            });
+            const newPoints = Math.max(0, (curStudent?.totalPoints || 0) + diff);
+            await tx.student.update({
+              where: { id: request.studentId },
+              data: { totalPoints: newPoints }
+            });
+          }
         } else {
           await tx.attendance.create({
             data: {
@@ -594,6 +646,22 @@ export async function approveOrRejectAttendanceAction(requestId: number, statusA
               scannedById: session.userId
             }
           });
+
+          let diff = 0;
+          if (request.status === 'present' || request.status === 'late') diff += 1;
+          else if (request.status === 'absent') diff -= 1;
+
+          if (diff !== 0) {
+            const curStudent = await tx.student.findUnique({
+              where: { id: request.studentId },
+              select: { totalPoints: true }
+            });
+            const newPoints = Math.max(0, (curStudent?.totalPoints || 0) + diff);
+            await tx.student.update({
+              where: { id: request.studentId },
+              data: { totalPoints: newPoints }
+            });
+          }
         }
       });
     } else {
@@ -604,6 +672,9 @@ export async function approveOrRejectAttendanceAction(requestId: number, statusA
     }
 
     revalidatePath('/teacher/dashboard');
+    revalidatePath('/teacher/scan');
+    revalidatePath('/teacher/students');
+    revalidatePath('/teacher/reports');
     revalidatePath('/parent/dashboard');
     revalidatePath('/parent/reports');
     revalidatePath(`/teacher/reports/${request.studentId}`);

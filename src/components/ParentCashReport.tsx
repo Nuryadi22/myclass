@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import Chart from 'chart.js/auto';
-import { Printer, Banknote, Receipt, Wallet, CheckCircle, AlertCircle, ImageIcon } from 'lucide-react';
+import { Printer, Banknote, Receipt, Wallet, CheckCircle, AlertCircle, ImageIcon, X } from 'lucide-react';
 
 interface Student {
   id: number;
@@ -49,6 +49,7 @@ export default function ParentCashReport({
   const [printStartDate, setPrintStartDate] = useState<string>('');
   const [printEndDate, setPrintEndDate] = useState<string>('');
   const [printMonth, setPrintMonth] = useState<string>('');
+  const [activePhotoUrl, setActivePhotoUrl] = useState<string | null>(null);
 
   // Set default selected month to current month on student switch
   useEffect(() => {
@@ -626,9 +627,20 @@ export default function ParentCashReport({
                             <div className="flex items-center gap-2 h-6">
                               <span>{tx.description}</span>
                               {tx.photoPath && (
-                                <span className="px-1.5 py-0.5 bg-slate-100 border border-slate-200 text-slate-500 rounded-md text-[9px] font-bold">
-                                  Ada Bukti
-                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const src = tx.photoPath!.startsWith('data:image')
+                                      ? tx.photoPath!
+                                      : (tx.photoPath!.startsWith('/') ? tx.photoPath! : `/${tx.photoPath!}`);
+                                    setActivePhotoUrl(src);
+                                  }}
+                                  className="py-0.5 px-1.5 bg-slate-100 hover:bg-indigo-50 border border-slate-200 hover:border-indigo-200 text-slate-500 hover:text-indigo-600 rounded-md text-[9px] font-bold flex items-center gap-1 cursor-pointer no-print transition-colors"
+                                  title="Lihat Bukti Nota"
+                                >
+                                  <ImageIcon className="w-3 h-3 text-indigo-600" />
+                                  <span>Bukti Nota</span>
+                                </button>
                               )}
                             </div>
                           )}
@@ -699,6 +711,37 @@ export default function ParentCashReport({
           </table>
         </div>
       </div>
+
+      {/* LIGHTBOX MODAL FOR VIEWING EXPENSE RECEIPT PHOTO */}
+      {activePhotoUrl && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-xs flex items-center justify-center z-50 p-4 animate-fade-in no-print">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-4 relative shadow-2xl space-y-4 animate-scale-up">
+            <button
+              type="button"
+              onClick={() => setActivePhotoUrl(null)}
+              className="absolute top-4 right-4 p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-800 rounded-full transition-colors cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
+              <ImageIcon className="w-5 h-5 text-indigo-600" />
+              <span className="font-extrabold text-sm text-slate-850">Lampiran Bukti Nota Pengeluaran</span>
+            </div>
+            <div className="aspect-video w-full rounded-2xl overflow-hidden border border-slate-200 bg-slate-950">
+              <img src={activePhotoUrl} alt="Receipt proof detailed" className="w-full h-full object-contain" />
+            </div>
+            <div className="text-center pt-1.5">
+              <button
+                type="button"
+                onClick={() => setActivePhotoUrl(null)}
+                className="px-6 py-2 bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs rounded-xl shadow-sm transition-all cursor-pointer"
+              >
+                Tutup Pratinjau
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
