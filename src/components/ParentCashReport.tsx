@@ -226,6 +226,29 @@ export default function ParentCashReport({
 
   const studentBillsSummary = getStudentBillsSummary();
 
+  // Calculate KAS income sources breakdown for the class
+  const getClassIncomeSources = () => {
+    const incomeTransactions = classTransactions.filter(t => t.type === 'income');
+    const totalIncomeVal = incomeTransactions.reduce((sum, t) => sum + t.amount, 0);
+
+    const sourceMap: Record<string, { description: string; total: number; count: number }> = {};
+    incomeTransactions.forEach(t => {
+      const desc = t.description ? t.description.trim() : 'Pemasukan Lainnya';
+      if (!sourceMap[desc]) {
+        sourceMap[desc] = { description: desc, total: 0, count: 0 };
+      }
+      sourceMap[desc].total += t.amount;
+      sourceMap[desc].count += 1;
+    });
+
+    return {
+      totalClassIncome: totalIncomeVal,
+      sources: Object.values(sourceMap).sort((a, b) => b.total - a.total)
+    };
+  };
+
+  const { totalClassIncome, sources: incomeSources } = getClassIncomeSources();
+
   // Chart rendering for comparison
   useEffect(() => {
     if (!chartRef.current) return;
@@ -498,14 +521,60 @@ export default function ParentCashReport({
           </div>
         </div>
 
-        {/* RIGHT PANEL: Pie Chart */}
-        <div className="bg-white rounded-3xl border border-slate-100 p-6 space-y-6 shadow-xs no-print">
-          <div>
-            <h3 className="font-extrabold text-slate-850 text-sm">Persentase Keuangan</h3>
-            <p className="text-[10px] text-slate-400 font-semibold mt-0.5">Perbandingan rasio kas masuk dan keluar.</p>
+        {/* RIGHT PANEL: Pie Chart & Income Sources */}
+        <div className="space-y-6 no-print">
+          {/* Pie Chart Card */}
+          <div className="bg-white rounded-3xl border border-slate-100 p-6 space-y-6 shadow-xs">
+            <div>
+              <h3 className="font-extrabold text-slate-850 text-sm">Persentase Keuangan</h3>
+              <p className="text-[10px] text-slate-400 font-semibold mt-0.5">Perbandingan rasio kas masuk dan keluar.</p>
+            </div>
+            <div className="relative h-48 w-full flex items-center justify-center">
+              <canvas ref={chartRef}></canvas>
+            </div>
           </div>
-          <div className="relative h-48 w-full flex items-center justify-center">
-            <canvas ref={chartRef}></canvas>
+
+          {/* Income Sources Card */}
+          <div className="bg-white rounded-3xl border border-slate-100 p-6 space-y-6 shadow-xs">
+            <div>
+              <h3 className="font-extrabold text-slate-850 text-sm">Rincian Sumber Pemasukan KAS</h3>
+              <p className="text-[10px] text-slate-400 font-semibold mt-0.5">Rincian sumber dana kas kelas ({activeClassName}) yang telah diterima.</p>
+            </div>
+
+            {incomeSources.length === 0 ? (
+              <p className="text-xs text-slate-400 font-semibold italic text-center py-6 border border-dashed border-slate-200 rounded-2xl">
+                Belum ada pemasukan kas yang tercatat.
+              </p>
+            ) : (
+              <div className="space-y-4">
+                {incomeSources.map((source, index) => {
+                  const percentage = totalClassIncome > 0 ? Math.round((source.total / totalClassIncome) * 100) : 0;
+                  return (
+                    <div key={index} className="space-y-1.5">
+                      <div className="flex justify-between items-center text-xs">
+                        <div className="flex items-center gap-2">
+                          <div className="w-2 h-2 rounded-full bg-emerald-500" />
+                          <span className="font-extrabold text-slate-850">{source.description}</span>
+                          <span className="text-[10px] text-slate-400 font-bold">({source.count}x)</span>
+                        </div>
+                        <div className="text-right">
+                          <span className="font-bold text-slate-800">Rp {source.total.toLocaleString('id-ID')}</span>
+                          <span className="ml-2 px-1.5 py-0.5 bg-emerald-50 text-emerald-700 text-[9px] font-extrabold rounded-md border border-emerald-100">
+                            {percentage}%
+                          </span>
+                        </div>
+                      </div>
+                      <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-emerald-500 rounded-full transition-all duration-500"
+                          style={{ width: `${percentage}%` }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
       </div>
