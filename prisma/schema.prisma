@@ -149,6 +149,7 @@ model ClassCash {
   amount      Float
   date        String   // YYYY-MM-DD
   photoPath   String?
+  cashSource  String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }

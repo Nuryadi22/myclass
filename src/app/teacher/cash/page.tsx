@@ -74,6 +74,7 @@ export default async function TeacherCashPage() {
           amount: t.amount,
           date: t.date,
           photoPath: t.photoPath || null,
+          cashSource: t.cashSource || null,
         }))}
       />
     </div>

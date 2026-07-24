@@ -703,6 +703,7 @@ export async function storeCashTransactionAction(prevState: any, formData: FormD
   const date = formData.get('date') as string; // YYYY-MM-DD
   const description = formData.get('description') as string;
   const studentIdStr = formData.get('student_id') as string | null;
+  const cashSource = formData.get('cash_source') as string | null;
 
   if (!type || isNaN(amount) || amount <= 0 || !date || !description) {
     return { error: 'Nominal, Tanggal, dan Keterangan wajib diisi dengan benar.' };
@@ -743,7 +744,8 @@ export async function storeCashTransactionAction(prevState: any, formData: FormD
         date,
         description: description.trim(),
         studentId,
-        photoPath
+        photoPath,
+        cashSource: type === 'expense' ? cashSource : null,
       } as any
     });
 

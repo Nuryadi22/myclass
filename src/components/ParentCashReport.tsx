@@ -20,6 +20,7 @@ interface Transaction {
   amount: number;
   date: string; // YYYY-MM-DD
   photoPath?: string | null;
+  cashSource?: string | null;
 }
 
 interface ClassBill {
@@ -693,23 +694,33 @@ export default function ParentCashReport({
                               </div>
                             )
                           ) : (
-                            <div className="flex items-center gap-2 h-6">
-                              <span>{tx.description}</span>
-                              {tx.photoPath && (
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    const src = tx.photoPath!.startsWith('data:image')
-                                      ? tx.photoPath!
-                                      : (tx.photoPath!.startsWith('/') ? tx.photoPath! : `/${tx.photoPath!}`);
-                                    setActivePhotoUrl(src);
-                                  }}
-                                  className="py-0.5 px-1.5 bg-slate-100 hover:bg-indigo-50 border border-slate-200 hover:border-indigo-200 text-slate-500 hover:text-indigo-600 rounded-md text-[9px] font-bold flex items-center gap-1 cursor-pointer no-print transition-colors"
-                                  title="Lihat Bukti Nota"
-                                >
-                                  <ImageIcon className="w-3 h-3 text-indigo-600" />
-                                  <span>Bukti Nota</span>
-                                </button>
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-2 h-6">
+                                <span className="font-extrabold text-slate-800">{tx.description}</span>
+                                {tx.photoPath && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const src = tx.photoPath!.startsWith('data:image')
+                                        ? tx.photoPath!
+                                        : (tx.photoPath!.startsWith('/') ? tx.photoPath! : `/${tx.photoPath!}`);
+                                      setActivePhotoUrl(src);
+                                    }}
+                                    className="py-0.5 px-1.5 bg-slate-100 hover:bg-indigo-50 border border-slate-200 hover:border-indigo-200 text-slate-500 hover:text-indigo-600 rounded-md text-[9px] font-bold flex items-center gap-1 cursor-pointer no-print transition-colors"
+                                    title="Lihat Bukti Nota"
+                                  >
+                                    <ImageIcon className="w-3 h-3 text-indigo-600" />
+                                    <span>Bukti Nota</span>
+                                  </button>
+                                )}
+                              </div>
+                              {tx.cashSource && (
+                                <div className="text-[10px] text-slate-500 font-semibold flex items-center gap-1">
+                                  <span>Sumber:</span>
+                                  <span className="px-1.5 py-0.5 bg-slate-100 text-slate-700 font-bold rounded-md border border-slate-200">
+                                    {tx.cashSource}
+                                  </span>
+                                </div>
                               )}
                             </div>
                           )}

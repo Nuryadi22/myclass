@@ -5,7 +5,11 @@ import PrayerFormList from '@/components/PrayerFormList';
 
 export const dynamic = 'force-dynamic';
 
-export default async function ParentPrayerPage() {
+interface PageProps {
+  searchParams: Promise<{ date?: string }>;
+}
+
+export default async function ParentPrayerPage({ searchParams }: PageProps) {
   const session = await getSession();
 
   if (!session) {
@@ -18,13 +22,16 @@ export default async function ParentPrayerPage() {
   });
 
   const todayStr = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Jakarta' }).format(new Date()); // YYYY-MM-DD in WIB
+  const { date } = await searchParams;
+  const targetDate = date || todayStr;
+
   const prayersData = [];
 
   for (const child of children) {
     const todayPrayer = await prisma.prayer.findFirst({
       where: {
         studentId: child.id,
-        date: todayStr,
+        date: targetDate,
       },
     });
 
@@ -59,7 +66,7 @@ export default async function ParentPrayerPage() {
         </p>
       </div>
 
-      <PrayerFormList prayersData={prayersData} todayStr={todayStr} />
+      <PrayerFormList prayersData={prayersData} todayStr={targetDate} />
     </div>
   );
 }

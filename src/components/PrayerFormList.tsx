@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState, useTransition } from 'react';
+import React, { useState, useEffect, useTransition } from 'react';
+import { useRouter } from 'next/navigation';
 import { storePrayerAction } from '@/app/actions/parent';
 import { Loader2, ClipboardCheck, AlertCircle, CheckCircle2 } from 'lucide-react';
 
@@ -32,6 +33,7 @@ interface PrayerFormListProps {
 }
 
 export default function PrayerFormList({ prayersData, todayStr }: PrayerFormListProps) {
+  const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -48,6 +50,21 @@ export default function PrayerFormList({ prayersData, todayStr }: PrayerFormList
       notes: data.today_prayer?.notes || '',
     }))
   );
+
+  // Reset local state when prayersData or todayStr changes (e.g. from date picker)
+  useEffect(() => {
+    setFormDataState(
+      prayersData.map((data) => ({
+        studentId: data.student.id,
+        subuh: data.today_prayer?.subuh || false,
+        dzuhur: data.today_prayer?.dzuhur || false,
+        ashar: data.today_prayer?.ashar || false,
+        maghrib: data.today_prayer?.maghrib || false,
+        isya: data.today_prayer?.isya || false,
+        notes: data.today_prayer?.notes || '',
+      }))
+    );
+  }, [prayersData, todayStr]);
 
   const handleCheckboxChange = (studentId: number, field: string) => {
     setFormDataState((prev) =>
@@ -99,6 +116,30 @@ export default function PrayerFormList({ prayersData, todayStr }: PrayerFormList
 
   return (
     <div className="space-y-6 max-w-xl mx-auto">
+      {/* Date Picker Selector */}
+      <div className="bg-white rounded-3xl border border-slate-100 p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xs animate-slide-in">
+        <div>
+          <h3 className="font-extrabold text-slate-850 text-base">Pilih Tanggal Laporan</h3>
+          <p className="text-xs text-slate-400 font-semibold mt-0.5">
+            Pilih tanggal untuk mencatat atau melihat riwayat shalat anak.
+          </p>
+        </div>
+        <div className="flex-shrink-0">
+          <input
+            type="date"
+            value={todayStr}
+            onChange={(e) => {
+              const selectedDate = e.target.value;
+              if (selectedDate) {
+                router.push(`/parent/prayer?date=${selectedDate}`);
+              }
+            }}
+            max={new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Jakarta' }).format(new Date())}
+            className="block w-full sm:w-48 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 focus:bg-white text-xs font-semibold transition-all cursor-pointer"
+          />
+        </div>
+      </div>
+
       {error && (
         <div className="p-4 bg-red-50 border border-red-100 text-red-800 rounded-2xl flex items-start gap-3 text-xs animate-shake">
           <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />

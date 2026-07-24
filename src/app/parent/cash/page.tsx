@@ -54,6 +54,7 @@ export default async function ParentCashPage() {
     amount: t.amount,
     date: t.date,
     photoPath: t.photoPath || null,
+    cashSource: t.cashSource || null,
   }));
 
   // Fetch bills for parent classes
