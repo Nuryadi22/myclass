@@ -633,10 +633,18 @@ export default function ClassCashManager({
                   return (
                     <div key={index} className="bg-slate-50/50 border border-slate-100 rounded-2xl p-4 space-y-3">
                       <div className="flex justify-between items-center text-xs border-b border-slate-100 pb-2">
-                        <span className="font-extrabold text-slate-800">{cat.name}</span>
-                        <span className="text-[10px] text-slate-400 font-bold">
-                          ({cat.incomeCount}x masuk{cat.expenseCount > 0 ? `, ${cat.expenseCount}x keluar` : ''})
-                        </span>
+                        <div className="flex flex-col sm:flex-row sm:items-baseline gap-1 sm:gap-1.5">
+                          <span className="font-extrabold text-slate-800">{cat.name}</span>
+                          <span className="text-[9px] text-slate-400 font-bold whitespace-nowrap">
+                            ({cat.incomeCount}x masuk{cat.expenseCount > 0 ? `, ${cat.expenseCount}x keluar` : ''})
+                          </span>
+                        </div>
+                        <div className="text-right whitespace-nowrap">
+                          <span className="text-[10px] text-slate-400 font-bold">Sisa: </span>
+                          <span className={`font-extrabold text-[11px] ${cat.income - cat.expense >= 0 ? 'text-indigo-600' : 'text-red-500'}`}>
+                            Rp {(cat.income - cat.expense).toLocaleString('id-ID')}
+                          </span>
+                        </div>
                       </div>
 
                       <div className="space-y-3">
