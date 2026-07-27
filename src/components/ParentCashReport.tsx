@@ -46,7 +46,8 @@ export default function ParentCashReport({
     students.length > 0 ? students[0].id.toString() : ''
   );
   
-  const [printFilterType, setPrintFilterType] = useState<'all' | 'income' | 'expense' | 'date_range' | 'month'>('all');
+  const [reportTab, setReportTab] = useState<'all' | 'income' | 'expense'>('all');
+  const [printFilterType, setPrintFilterType] = useState<'all' | 'date_range' | 'month'>('all');
   const [printStartDate, setPrintStartDate] = useState<string>('');
   const [printEndDate, setPrintEndDate] = useState<string>('');
   const [printMonth, setPrintMonth] = useState<string>('');
@@ -96,26 +97,8 @@ export default function ParentCashReport({
   };
 
   // Financial calculations for active class
-  const totalIncome = classTransactions
-    .filter((t) => t.type === 'income')
-    .reduce((sum, t) => sum + t.amount, 0);
-
-  const totalExpense = classTransactions
-    .filter((t) => t.type === 'expense')
-    .reduce((sum, t) => sum + t.amount, 0);
-
-  const balance = totalIncome - totalExpense;
-
-  // Filtered transactions for the report table
-  const getFilteredTransactions = () => {
-    if (printFilterType === 'income') {
-      return classTransactions.filter((t) => t.type === 'income');
-    }
-    
-    if (printFilterType === 'expense') {
-      return classTransactions.filter((t) => t.type === 'expense');
-    }
-
+  // Filtered transactions for the stats cards (by period/month but NOT by reportTab type)
+  const getCardTransactions = () => {
     if (printFilterType === 'month') {
       const monthStr = printMonth || new Date().toISOString().substring(0, 7);
       return classTransactions.filter((t) => t.date.startsWith(monthStr));
@@ -135,8 +118,35 @@ export default function ParentCashReport({
     return classTransactions;
   };
 
+  const cardTransactions = getCardTransactions();
+
+  // Financial calculations for active class/period (Overview cards)
+  const totalIncome = cardTransactions
+    .filter((t) => t.type === 'income')
+    .reduce((sum, t) => sum + t.amount, 0);
+
+  const totalExpense = cardTransactions
+    .filter((t) => t.type === 'expense')
+    .reduce((sum, t) => sum + t.amount, 0);
+
+  const balance = totalIncome - totalExpense;
+
+  // Filtered transactions for the report table (further filtered by reportTab: 'all' | 'income' | 'expense')
+  const getFilteredTransactions = () => {
+    return cardTransactions.filter((t) => {
+      if (reportTab === 'income') {
+        return t.type === 'income';
+      }
+      if (reportTab === 'expense') {
+        return t.type === 'expense';
+      }
+      return true;
+    });
+  };
+
   const filteredTransactions = getFilteredTransactions();
 
+  // Table summary values
   const filteredIncome = filteredTransactions
     .filter((t) => t.type === 'income')
     .reduce((sum, t) => sum + t.amount, 0);
@@ -227,28 +237,54 @@ export default function ParentCashReport({
 
   const studentBillsSummary = getStudentBillsSummary();
 
-  // Calculate KAS income sources breakdown for the class
-  const getClassIncomeSources = () => {
-    const incomeTransactions = classTransactions.filter(t => t.type === 'income');
-    const totalIncomeVal = incomeTransactions.reduce((sum, t) => sum + t.amount, 0);
+  // Calculate combined KAS income and expense sources breakdown for the class (using cardTransactions)
+  const getClassBreakdown = () => {
+    const categories: Record<string, { income: number; expense: number; incomeCount: number; expenseCount: number }> = {};
 
-    const sourceMap: Record<string, { description: string; total: number; count: number }> = {};
-    incomeTransactions.forEach(t => {
-      const desc = t.description ? t.description.trim() : 'Pemasukan Lainnya';
-      if (!sourceMap[desc]) {
-        sourceMap[desc] = { description: desc, total: 0, count: 0 };
-      }
-      sourceMap[desc].total += t.amount;
-      sourceMap[desc].count += 1;
+    // 1. Initialize with active bills
+    const activeClassName = activeStudent ? activeStudent.className : '';
+    const classBills = bills.filter(b => b.className === activeClassName);
+    classBills.forEach(b => {
+      categories[b.title] = { income: 0, expense: 0, incomeCount: 0, expenseCount: 0 };
     });
 
-    return {
-      totalClassIncome: totalIncomeVal,
-      sources: Object.values(sourceMap).sort((a, b) => b.total - a.total)
-    };
+    // Add default categories
+    const defaultCats = ['Pemasukan Lainnya'];
+    defaultCats.forEach(cat => {
+      if (!categories[cat]) {
+        categories[cat] = { income: 0, expense: 0, incomeCount: 0, expenseCount: 0 };
+      }
+    });
+
+    // 2. Process card transactions
+    cardTransactions.forEach(t => {
+      if (t.type === 'income') {
+        const cat = t.description ? t.description.trim() : 'Pemasukan Lainnya';
+        if (!categories[cat]) {
+          categories[cat] = { income: 0, expense: 0, incomeCount: 0, expenseCount: 0 };
+        }
+        categories[cat].income += t.amount;
+        categories[cat].incomeCount += 1;
+      } else if (t.type === 'expense') {
+        const cat = t.cashSource ? t.cashSource.trim() : 'Kas Utama';
+        if (!categories[cat]) {
+          categories[cat] = { income: 0, expense: 0, incomeCount: 0, expenseCount: 0 };
+        }
+        categories[cat].expense += t.amount;
+        categories[cat].expenseCount += 1;
+      }
+    });
+
+    return Object.entries(categories)
+      .map(([name, data]) => ({
+        name,
+        ...data
+      }))
+      .filter(c => c.name !== 'Kas Utama' && (c.income > 0 || c.expense > 0 || classBills.some(b => b.title === c.name)))
+      .sort((a, b) => b.income - a.income || b.expense - a.expense);
   };
 
-  const { totalClassIncome, sources: incomeSources } = getClassIncomeSources();
+  const categoriesData = getClassBreakdown();
 
   // Chart rendering for comparison
   useEffect(() => {
@@ -427,157 +463,206 @@ export default function ParentCashReport({
         )}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
-        {/* LEFT PANEL: Financial Cards */}
-        <div className="lg:col-span-2 space-y-6 no-print">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            {/* Balance Card */}
-            <div className="bg-emerald-50 border border-emerald-100 p-5 rounded-3xl flex items-center justify-between shadow-2xs">
-              <div className="space-y-1">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600">Saldo Kas Kelas</span>
-                <h3 className="text-lg font-extrabold text-emerald-850">
-                  Rp {balance.toLocaleString('id-ID')}
-                </h3>
-                <span className="text-[9px] text-emerald-500 font-bold block">Sisa dana tersedia</span>
-              </div>
-              <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center">
-                <Wallet className="w-5 h-5" />
-              </div>
-            </div>
-
-            {/* Income Card */}
-            <div className="bg-white border border-slate-100 p-5 rounded-3xl flex items-center justify-between shadow-2xs">
-              <div className="space-y-1">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total Pemasukan</span>
-                <h3 className="text-lg font-extrabold text-emerald-600">
-                  Rp {totalIncome.toLocaleString('id-ID')}
-                </h3>
-                <span className="text-[9px] text-slate-400 font-semibold block">Dari iuran murid dll</span>
-              </div>
-              <div className="w-10 h-10 rounded-xl bg-slate-50 text-emerald-650 flex items-center justify-center">
-                <Banknote className="w-5 h-5" />
-              </div>
-            </div>
-
-            {/* Expense Card */}
-            <div className="bg-white border border-slate-100 p-5 rounded-3xl flex items-center justify-between shadow-2xs">
-              <div className="space-y-1">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total Pengeluaran</span>
-                <h3 className="text-lg font-extrabold text-red-500">
-                  Rp {totalExpense.toLocaleString('id-ID')}
-                </h3>
-                <span className="text-[9px] text-slate-400 font-semibold block">Kebutuhan operasional</span>
-              </div>
-              <div className="w-10 h-10 rounded-xl bg-slate-50 text-red-500 flex items-center justify-center">
-                <Receipt className="w-5 h-5" />
-              </div>
-            </div>
+      {/* 2. STATS OVERVIEW CARDS */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 no-print">
+        {/* Balance Card */}
+        <div className="bg-emerald-50 border border-emerald-100 p-5 rounded-3xl flex items-center justify-between shadow-2xs">
+          <div className="space-y-1">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600">Saldo Kas Kelas</span>
+            <h3 className="text-lg font-extrabold text-emerald-850">
+              Rp {balance.toLocaleString('id-ID')}
+            </h3>
+            <span className="text-[9px] text-emerald-500 font-bold block">Sisa dana tersedia</span>
           </div>
-
-          {/* TOTAL TAGIHAN KAS BERDASARKAN KATEGORI */}
-          <div className="bg-white rounded-3xl border border-slate-100 p-6 space-y-4 shadow-xs">
-            <div>
-              <h4 className="font-extrabold text-slate-850 text-sm">Status Tagihan Murid ({activeStudent?.name})</h4>
-              <p className="text-[10px] text-slate-400 font-semibold mt-0.5">Rincian status tagihan wajib yang harus diselesaikan untuk anak Anda.</p>
-            </div>
-
-            {studentBillsSummary.length === 0 ? (
-              <p className="text-xs text-slate-400 font-semibold italic text-center py-6 border border-dashed border-slate-200 rounded-2xl">
-                Belum ada tagihan wajib yang ditetapkan oleh Wali Kelas.
-              </p>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {studentBillsSummary.map((b, idx) => (
-                  <div key={idx} className="p-4 bg-slate-50/50 border border-slate-150 rounded-2xl flex flex-col justify-between space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="font-extrabold text-slate-800 text-xs">{b.title}</span>
-                      {b.remaining === 0 ? (
-                        <span className="px-2 py-0.5 bg-emerald-50 text-emerald-800 text-[9px] font-extrabold rounded-full border border-emerald-100 flex items-center gap-0.5 select-none">
-                          <CheckCircle className="w-3 h-3" /> Lunas
-                        </span>
-                      ) : (
-                        <span className="px-2 py-0.5 bg-red-50 text-red-800 text-[9px] font-extrabold rounded-full border border-red-100 flex items-center gap-0.5 select-none">
-                          <AlertCircle className="w-3 h-3" /> Belum Lunas
-                        </span>
-                      )}
-                    </div>
-                    <div className="grid grid-cols-3 gap-2 text-[10px] font-semibold text-slate-500 pt-1.5 border-t border-slate-100">
-                      <div>
-                        <span className="block text-[8px] uppercase font-bold text-slate-400 leading-none mb-1">Tagihan:</span>
-                        <span className="text-slate-800">Rp {b.amount.toLocaleString('id-ID')}</span>
-                      </div>
-                      <div>
-                        <span className="block text-[8px] uppercase font-bold text-slate-400 leading-none mb-1">Dibayar:</span>
-                        <span className="text-emerald-600 font-bold">Rp {b.paid.toLocaleString('id-ID')}</span>
-                      </div>
-                      <div>
-                        <span className="block text-[8px] uppercase font-bold text-slate-400 leading-none mb-1">Sisa:</span>
-                        <span className={`font-extrabold ${b.remaining > 0 ? 'text-red-500' : 'text-slate-500'}`}>Rp {b.remaining.toLocaleString('id-ID')}</span>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
+          <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center">
+            <Wallet className="w-5 h-5" />
           </div>
         </div>
 
-        {/* RIGHT PANEL: Pie Chart & Income Sources */}
-        <div className="space-y-6 no-print">
-          {/* Pie Chart Card */}
-          <div className="bg-white rounded-3xl border border-slate-100 p-6 space-y-6 shadow-xs">
-            <div>
-              <h3 className="font-extrabold text-slate-850 text-sm">Persentase Keuangan</h3>
-              <p className="text-[10px] text-slate-400 font-semibold mt-0.5">Perbandingan rasio kas masuk dan keluar.</p>
-            </div>
-            <div className="relative h-48 w-full flex items-center justify-center">
-              <canvas ref={chartRef}></canvas>
-            </div>
+        {/* Income Card */}
+        <div className="bg-white border border-slate-100 p-5 rounded-3xl flex items-center justify-between shadow-2xs">
+          <div className="space-y-1">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total Pemasukan</span>
+            <h3 className="text-lg font-extrabold text-emerald-600">
+              Rp {totalIncome.toLocaleString('id-ID')}
+            </h3>
+            <span className="text-[9px] text-slate-400 font-semibold block">Dari iuran kas kelas</span>
           </div>
+          <div className="w-10 h-10 rounded-xl bg-slate-50 text-emerald-650 flex items-center justify-center">
+            <Banknote className="w-5 h-5" />
+          </div>
+        </div>
 
-          {/* Income Sources Card */}
-          <div className="bg-white rounded-3xl border border-slate-100 p-6 space-y-6 shadow-xs">
+        {/* Expense Card */}
+        <div className="bg-white border border-slate-100 p-5 rounded-3xl flex items-center justify-between shadow-2xs">
+          <div className="space-y-1">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total Pengeluaran</span>
+            <h3 className="text-lg font-extrabold text-red-500">
+              Rp {totalExpense.toLocaleString('id-ID')}
+            </h3>
+            <span className="text-[9px] text-slate-400 font-semibold block">Kebutuhan operasional</span>
+          </div>
+          <div className="w-10 h-10 rounded-xl bg-slate-50 text-red-500 flex items-center justify-center">
+            <Receipt className="w-5 h-5" />
+          </div>
+        </div>
+      </div>
+
+      {/* 3. CHART & DETAILS PANEL (Parallel/Sejajar) */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-stretch no-print">
+        {/* Pie Chart Card */}
+        <div className="bg-white rounded-3xl border border-slate-100 p-6 space-y-6 shadow-xs flex flex-col justify-between">
+          <div>
+            <h3 className="font-extrabold text-slate-850 text-sm">Persentase Keuangan</h3>
+            <p className="text-[10px] text-slate-400 font-semibold mt-0.5">Perbandingan rasio kas masuk dan keluar.</p>
+          </div>
+          <div className="relative h-48 w-full flex items-center justify-center flex-grow">
+            <canvas ref={chartRef}></canvas>
+          </div>
+        </div>
+
+        {/* Financial Details Breakdown (Pemasukan & Pengeluaran) */}
+        <div className="bg-white rounded-3xl border border-slate-100 p-6 space-y-6 shadow-xs flex flex-col justify-between">
+          <div className="space-y-4 flex-grow">
             <div>
-              <h3 className="font-extrabold text-slate-850 text-sm">Rincian Sumber Pemasukan KAS</h3>
-              <p className="text-[10px] text-slate-400 font-semibold mt-0.5">Rincian sumber dana kas kelas ({activeClassName}) yang telah diterima.</p>
+              <h3 className="font-extrabold text-slate-850 text-sm">Rincian Alokasi Kas per Kategori</h3>
+              <p className="text-[10px] text-slate-400 font-semibold mt-0.5">Rincian perbandingan alokasi kas masuk dan keluar terfilter per kategori.</p>
             </div>
 
-            {incomeSources.length === 0 ? (
-              <p className="text-xs text-slate-400 font-semibold italic text-center py-6 border border-dashed border-slate-200 rounded-2xl">
-                Belum ada pemasukan kas yang tercatat.
-              </p>
-            ) : (
-              <div className="space-y-4">
-                {incomeSources.map((source, index) => {
-                  const percentage = totalClassIncome > 0 ? Math.round((source.total / totalClassIncome) * 100) : 0;
+            <div className="space-y-4 max-h-[300px] overflow-y-auto pr-1">
+              {categoriesData.length === 0 ? (
+                <p className="text-xs text-slate-400 font-semibold italic text-center py-6 border border-dashed border-slate-200 rounded-2xl">
+                  Belum ada alokasi kas yang tercatat.
+                </p>
+              ) : (
+                categoriesData.map((cat, index) => {
+                  const incomePercent = totalIncome > 0 ? Math.round((cat.income / totalIncome) * 100) : 0;
+                  const spentPercent = cat.income > 0 ? Math.round((cat.expense / cat.income) * 100) : 0;
+
                   return (
-                    <div key={index} className="space-y-1.5">
-                      <div className="flex justify-between items-center text-xs">
-                        <div className="flex items-center gap-2">
-                          <div className="w-2 h-2 rounded-full bg-emerald-500" />
-                          <span className="font-extrabold text-slate-850">{source.description}</span>
-                          <span className="text-[10px] text-slate-400 font-bold">({source.count}x)</span>
-                        </div>
-                        <div className="text-right">
-                          <span className="font-bold text-slate-800">Rp {source.total.toLocaleString('id-ID')}</span>
-                          <span className="ml-2 px-1.5 py-0.5 bg-emerald-50 text-emerald-700 text-[9px] font-extrabold rounded-md border border-emerald-100">
-                            {percentage}%
-                          </span>
-                        </div>
+                    <div key={index} className="bg-slate-50/50 border border-slate-100 rounded-2xl p-4 space-y-3">
+                      <div className="flex justify-between items-center text-xs border-b border-slate-100 pb-2">
+                        <span className="font-extrabold text-slate-800">{cat.name}</span>
+                        <span className="text-[10px] text-slate-400 font-bold">
+                          ({cat.incomeCount}x masuk{cat.expenseCount > 0 ? `, ${cat.expenseCount}x keluar` : ''})
+                        </span>
                       </div>
-                      <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-emerald-500 rounded-full transition-all duration-500"
-                          style={{ width: `${percentage}%` }}
-                        />
+
+                      <div className="space-y-3">
+                        {/* Income Bar (only if there is income) */}
+                        {(cat.income > 0 || cat.name !== 'Kas Utama') && (
+                          <div className="space-y-1">
+                            <div className="flex justify-between items-center text-[10px]">
+                              <span className="text-slate-500 font-bold flex items-center gap-1.5">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                                Pemasukan
+                              </span>
+                              <div className="text-right">
+                                <span className="font-bold text-slate-850">Rp {cat.income.toLocaleString('id-ID')}</span>
+                                {totalIncome > 0 && (
+                                  <span className="ml-1.5 px-1 py-0.5 bg-emerald-50 text-emerald-700 text-[9px] font-extrabold rounded-md border border-emerald-100">
+                                    {incomePercent}%
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                              <div
+                                className="h-full bg-emerald-500 rounded-full transition-all duration-500"
+                                style={{ width: `${incomePercent}%` }}
+                              />
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Expense Bar */}
+                        <div className="space-y-1">
+                          <div className="flex justify-between items-center text-[10px]">
+                            <span className="text-slate-500 font-bold flex items-center gap-1.5">
+                              <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
+                              Pengeluaran
+                            </span>
+                            <div className="text-right">
+                              <span className="font-bold text-slate-850">Rp {cat.expense.toLocaleString('id-ID')}</span>
+                              {cat.income > 0 ? (
+                                <span className={`ml-1.5 px-1 py-0.5 text-[9px] font-extrabold rounded-md border ${
+                                  cat.expense > 0 
+                                    ? (spentPercent > 100 ? 'bg-red-150 text-red-800 border-red-200' : 'bg-red-50 text-red-700 border-red-100')
+                                    : 'bg-slate-100 text-slate-500 border-slate-200'
+                                }`}>
+                                  {spentPercent}% terpakai
+                                </span>
+                              ) : (
+                                totalExpense > 0 && cat.expense > 0 && (
+                                  <span className="ml-1.5 px-1 py-0.5 bg-red-50 text-red-700 text-[9px] font-extrabold rounded-md border border-red-100">
+                                    {Math.round((cat.expense / totalExpense) * 100)}%
+                                  </span>
+                                )
+                              )}
+                            </div>
+                          </div>
+                          <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                            <div
+                              className="h-full bg-red-500 rounded-full transition-all duration-500"
+                              style={{ width: `${cat.income > 0 ? Math.min(100, spentPercent) : (totalExpense > 0 ? Math.round((cat.expense / totalExpense) * 100) : 0)}%` }}
+                            />
+                          </div>
+                        </div>
                       </div>
                     </div>
                   );
-                })}
-              </div>
-            )}
+                })
+              )}
+            </div>
           </div>
         </div>
+      </div>
+
+      {/* 4. ACTIVE BILLS PANEL (Full Width / Sejajar di bawah) */}
+      <div className="bg-white rounded-3xl border border-slate-100 p-6 space-y-4 shadow-xs no-print">
+        <div>
+          <h4 className="font-extrabold text-slate-850 text-sm">Status Tagihan Murid ({activeStudent?.name})</h4>
+          <p className="text-[10px] text-slate-400 font-semibold mt-0.5">Rincian status tagihan wajib yang harus diselesaikan untuk anak Anda.</p>
+        </div>
+
+        {studentBillsSummary.length === 0 ? (
+          <p className="text-xs text-slate-400 font-semibold italic text-center py-6 border border-dashed border-slate-200 rounded-2xl">
+            Belum ada tagihan wajib yang ditetapkan oleh Wali Kelas.
+          </p>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+            {studentBillsSummary.map((b, idx) => (
+              <div key={idx} className="p-4 bg-slate-50/50 border border-slate-150 rounded-2xl flex flex-col justify-between space-y-3 shadow-3xs hover:shadow-2xs transition-shadow">
+                <div className="flex items-center justify-between">
+                  <span className="font-extrabold text-slate-800 text-xs">{b.title}</span>
+                  {b.remaining === 0 ? (
+                    <span className="px-2 py-0.5 bg-emerald-50 text-emerald-800 text-[9px] font-extrabold rounded-full border border-emerald-100 flex items-center gap-0.5 select-none animate-fade-in">
+                      <CheckCircle className="w-3 h-3" /> Lunas
+                    </span>
+                  ) : (
+                    <span className="px-2 py-0.5 bg-red-50 text-red-800 text-[9px] font-extrabold rounded-full border border-red-100 flex items-center gap-0.5 select-none animate-fade-in">
+                      <AlertCircle className="w-3 h-3" /> Belum Lunas
+                    </span>
+                  )}
+                </div>
+                <div className="grid grid-cols-3 gap-2 text-[10px] font-semibold text-slate-500 pt-1.5 border-t border-slate-100">
+                  <div>
+                    <span className="block text-[8px] uppercase font-bold text-slate-400 leading-none mb-1">Tagihan:</span>
+                    <span className="text-slate-800">Rp {b.amount.toLocaleString('id-ID')}</span>
+                  </div>
+                  <div>
+                    <span className="block text-[8px] uppercase font-bold text-slate-400 leading-none mb-1">Dibayar:</span>
+                    <span className="text-emerald-600 font-bold">Rp {b.paid.toLocaleString('id-ID')}</span>
+                  </div>
+                  <div>
+                    <span className="block text-[8px] uppercase font-bold text-slate-400 leading-none mb-1">Sisa:</span>
+                    <span className={`font-extrabold ${b.remaining > 0 ? 'text-red-500' : 'text-slate-500'}`}>Rp {b.remaining.toLocaleString('id-ID')}</span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* REPORT LEDGER TABLE & DETAILS */}
@@ -598,10 +683,6 @@ export default function ParentCashReport({
                 ? formatMonthYear(printMonth)
                 : printFilterType === 'date_range'
                 ? `${printStartDate ? new Intl.DateTimeFormat('id-ID').format(new Date(printStartDate)) : ''} s/d ${printEndDate ? new Intl.DateTimeFormat('id-ID').format(new Date(printEndDate)) : ''}`
-                : printFilterType === 'income'
-                ? 'Pemasukan Saja'
-                : printFilterType === 'expense'
-                ? 'Pengeluaran Saja'
                 : 'Semua Transaksi'
             }
           </p>
