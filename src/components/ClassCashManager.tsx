@@ -1136,11 +1136,51 @@ export default function ClassCashManager({
 
       {/* 5. DETAILED TRANSACTION LEDGER TABLE (Contains print ID) */}
       <div id="print-area" className="bg-white rounded-3xl border border-slate-100 p-6 space-y-6 shadow-3xs">
-        <div>
-          <h3 className="font-extrabold text-slate-850 text-lg">Laporan Pembukuan Keuangan Kelas ({className})</h3>
-          <p className="text-xs text-slate-400 font-semibold mt-0.5 print:hidden">
-            Rincian seluruh pencatatan transaksi masuk dan keluar kas keuangan kelas.
-          </p>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4">
+          <div>
+            <h3 className="font-extrabold text-slate-850 text-lg">Laporan Pembukuan Keuangan Kelas ({className})</h3>
+            <p className="text-xs text-slate-400 font-semibold mt-0.5 print:hidden">
+              Rincian seluruh pencatatan transaksi masuk dan keluar kas keuangan kelas.
+            </p>
+          </div>
+          
+          <div className="flex gap-1.5 p-1 bg-slate-100 rounded-xl text-xs font-bold w-fit print:hidden">
+            <button
+              type="button"
+              onClick={() => setReportTab('all')}
+              className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer flex items-center gap-1 ${
+                reportTab === 'all'
+                  ? 'bg-slate-850 text-white shadow-sm'
+                  : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              <span>Semua</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setReportTab('income')}
+              className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer flex items-center gap-1 ${
+                reportTab === 'income'
+                  ? 'bg-emerald-600 text-white shadow-sm'
+                  : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Pemasukan</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setReportTab('expense')}
+              className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer flex items-center gap-1 ${
+                reportTab === 'expense'
+                  ? 'bg-red-600 text-white shadow-sm'
+                  : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              <Minus className="w-3.5 h-3.5" />
+              <span>Pengeluaran</span>
+            </button>
+          </div>
         </div>
 
         {/* Print Header (Only visible on print layouts) */}
