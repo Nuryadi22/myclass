@@ -199,28 +199,12 @@ export default function ClassCashManager({
 
   const cardTransactions = getCardTransactions();
 
-  // Filtered transactions for the table (further filtered by reportTab: 'all' | 'income' | 'expense')
-  const getFilteredTransactions = () => {
-    return cardTransactions.filter((t) => {
-      if (reportTab === 'income') {
-        return t.type === 'income';
-      }
-      if (reportTab === 'expense') {
-        return t.type === 'expense';
-      }
-      return true;
-    });
-  };
-
-  const filteredTransactions = getFilteredTransactions();
-
-  // Consolidation grouping function for display table
-  const getGroupedTransactions = (txList: typeof filteredTransactions) => {
+  const getGroupedIncomeTransactions = (txList: typeof transactions) => {
     const grouped: any[] = [];
     const incomeGroups: Record<string, any> = {};
 
     txList.forEach((tx) => {
-      if (tx.type === 'expense' || !tx.studentId) {
+      if (!tx.studentId) {
         // Keep standalone
         grouped.push({
           ...tx,
@@ -263,12 +247,23 @@ export default function ClassCashManager({
       }
     });
 
-    // Re-sort grouped transactions by date descending
-    grouped.sort((a, b) => b.date.localeCompare(a.date));
-    return grouped;
+    return grouped.sort((a, b) => b.date.localeCompare(a.date));
   };
 
-  const displayTransactions = getGroupedTransactions(filteredTransactions);
+  const getExpenseTransactions = (txList: typeof transactions) => {
+    return txList.map(tx => ({
+      ...tx,
+      ids: [tx.id],
+      isMerged: false,
+      studentPayments: []
+    })).sort((a, b) => b.date.localeCompare(a.date));
+  };
+
+  const incomeCardTransactions = cardTransactions.filter(t => t.type === 'income');
+  const expenseCardTransactions = cardTransactions.filter(t => t.type === 'expense');
+
+  const displayIncomeTransactions = getGroupedIncomeTransactions(incomeCardTransactions);
+  const displayExpenseTransactions = getExpenseTransactions(expenseCardTransactions);
 
   // Financial Calculations (using cardTransactions to stay independent of reportTab)
   const totalIncome = cardTransactions
@@ -915,7 +910,7 @@ export default function ClassCashManager({
                       required
                       className="block w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-800 focus:border-slate-800 focus:bg-white text-xs font-semibold transition-all cursor-pointer"
                     >
-                      <option value="Kas Utama">Kas Utama (Kas Umum)</option>
+                      <option value="">-- Pilih Sumber Kas --</option>
                       {bills.map((bill) => (
                         <option key={bill.id} value={bill.title}>
                           {bill.title}
@@ -1174,78 +1169,163 @@ export default function ClassCashManager({
         </div>
 
         {/* Transactions Table List */}
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs border-collapse">
-            <thead>
-              <tr className="border-b border-slate-200 text-slate-400 font-bold uppercase tracking-wider bg-slate-50/50">
-                <th className="py-3 px-3">No</th>
-                <th className="py-3 px-3">Tanggal</th>
-                <th className="py-3 px-3">Jenis</th>
-                <th className="py-3 px-3">Detail Keterangan</th>
-                <th className="py-3 px-3 text-right">Nominal</th>
-                <th className="py-3 px-3 text-center print:hidden">Aksi</th>
-              </tr>
-            </thead>
-            <tbody className="font-semibold text-slate-700">
-              {displayTransactions.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="py-12 text-center text-slate-400 font-bold">
-                    Tidak ada catatan transaksi dalam periode ini.
-                  </td>
-                </tr>
-              ) : (
-                displayTransactions.map((tx, idx) => {
-                  const formattedTxDate = new Intl.DateTimeFormat('id-ID', {
-                    day: 'numeric',
-                    month: 'short',
-                    year: 'numeric',
-                  }).format(new Date(tx.date));
+        {/* Transactions Table Lists */}
+        <div className="space-y-8">
+          {/* INCOME TABLE */}
+          {(reportTab === 'all' || reportTab === 'income') && (
+            <div className="space-y-3">
+              {(reportTab === 'all') && (
+                <div className="flex items-center gap-2 border-l-4 border-emerald-500 pl-3">
+                  <h4 className="font-extrabold text-xs text-slate-800 uppercase tracking-wider">Tabel Pemasukan Kas</h4>
+                </div>
+              )}
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="border-b border-slate-200 text-slate-400 font-bold uppercase tracking-wider bg-slate-50/50">
+                      <th className="py-3 px-3 w-12">No</th>
+                      <th className="py-3 px-3 w-32">Tanggal</th>
+                      <th className="py-3 px-3 w-40">Kategori / Iuran</th>
+                      <th className="py-3 px-3">Detail Pembayar</th>
+                      <th className="py-3 px-3 text-right w-36">Nominal</th>
+                      <th className="py-3 px-3 text-center w-20 print:hidden">Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody className="font-semibold text-slate-700">
+                    {displayIncomeTransactions.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="py-8 text-center text-slate-400 font-bold">
+                          Tidak ada catatan pemasukan kas dalam periode ini.
+                        </td>
+                      </tr>
+                    ) : (
+                      displayIncomeTransactions.map((tx, idx) => {
+                        const formattedTxDate = new Intl.DateTimeFormat('id-ID', {
+                          day: 'numeric',
+                          month: 'short',
+                          year: 'numeric',
+                        }).format(new Date(tx.date));
 
-                  return (
-                    <tr key={tx.id} className="border-b border-slate-100 hover:bg-slate-50/10 transition-colors align-top">
-                      <td className="py-3.5 px-3 text-slate-400 text-[10px] align-top">{idx + 1}</td>
-                      <td className="py-3.5 px-3 align-top">{formattedTxDate}</td>
-                      <td className="py-3.5 px-3 align-top">
-                        <span
-                          className={`px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase border ${
-                            tx.type === 'income'
-                              ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
-                              : 'bg-red-50 border-red-200 text-red-700'
-                          }`}
-                        >
-                          {tx.type === 'income' ? 'Masuk' : 'Keluar'}
-                        </span>
-                      </td>
-                      <td className="py-3.5 px-3 align-top">
-                        <div className="space-y-1">
-                          {tx.type === 'income' ? (
-                            tx.isMerged ? (
-                              <div>
-                                <div className="h-6 flex items-center font-extrabold text-slate-900">{tx.description}</div>
-                                <div className="space-y-1.5 pl-6 border-l-2 border-slate-100 mt-1">
+                        return (
+                          <tr key={tx.id} className="border-b border-slate-100 hover:bg-slate-50/10 transition-colors align-top">
+                            <td className="py-3.5 px-3 text-slate-400 text-[10px] align-top">{idx + 1}</td>
+                            <td className="py-3.5 px-3 align-top">{formattedTxDate}</td>
+                            <td className="py-3.5 px-3 align-top">
+                              <span className="font-extrabold text-slate-900">{tx.description}</span>
+                            </td>
+                            <td className="py-3.5 px-3 align-top">
+                              {tx.isMerged ? (
+                                <div className="space-y-1.5 pl-3 border-l-2 border-slate-100">
                                   {tx.studentPayments.map((p: any, pIdx: number) => (
                                     <div key={pIdx} className="h-5 flex items-center text-slate-500 font-semibold text-xs">
                                       {p.name}
                                     </div>
                                   ))}
                                 </div>
-                              </div>
-                            ) : tx.studentName ? (
-                              <div>
-                                <span className="font-extrabold text-slate-800">{tx.description}</span>
-                                <div className="pl-6 border-l-2 border-slate-100 mt-1 text-slate-500 font-semibold text-xs h-5 flex items-center">
+                              ) : tx.studentName ? (
+                                <div className="pl-3 border-l-2 border-slate-100 text-slate-500 font-semibold text-xs h-5 flex items-center">
                                   {tx.studentName}
                                 </div>
-                              </div>
-                            ) : (
-                              <div>
-                                <span>Pemasukan <span className="font-bold text-slate-900">Lainnya</span></span>
-                                <span className="text-slate-400 text-[10px] ml-1 font-semibold">({tx.description})</span>
-                              </div>
-                            )
-                          ) : (
-                            <div className="space-y-1">
-                              <div className="flex items-center gap-2 h-6">
+                              ) : (
+                                <span className="text-slate-400 italic text-xs">Bukan Murid / Lainnya</span>
+                              )}
+                            </td>
+                            <td className="py-3.5 px-3 text-right font-mono font-bold text-slate-850 align-top">
+                              {tx.isMerged ? (
+                                <div>
+                                  <div className="h-6 flex items-center justify-end font-black text-emerald-600">
+                                    Rp {tx.amount.toLocaleString('id-ID')}
+                                  </div>
+                                  <div className="space-y-1.5">
+                                    {tx.studentPayments.map((p: any, pIdx: number) => (
+                                      <div key={pIdx} className="h-5 flex items-center justify-end text-slate-400 text-[10px] font-bold">
+                                        Rp {p.amount.toLocaleString('id-ID')}
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="font-black text-emerald-600">
+                                  Rp {tx.amount.toLocaleString('id-ID')}
+                                </div>
+                              )}
+                            </td>
+                            <td className="py-3.5 px-3 text-center print:hidden align-top">
+                              <button
+                                onClick={() => handleDeleteTransaction(tx.ids)}
+                                className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                                title="Hapus Transaksi"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                  {reportTab === 'income' && displayIncomeTransactions.length > 0 && (
+                    <tfoot>
+                      <tr className="bg-slate-50/70 font-extrabold border-t border-slate-200">
+                        <td colSpan={4} className="py-3.5 px-3 text-right text-slate-500 uppercase tracking-wide">Total Pemasukan:</td>
+                        <td className="py-3.5 px-3 text-right text-emerald-600 font-mono">
+                          Rp {totalIncome.toLocaleString('id-ID')}
+                        </td>
+                        <td className="print:hidden"></td>
+                      </tr>
+                    </tfoot>
+                  )}
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* EXPENSE TABLE */}
+          {(reportTab === 'all' || reportTab === 'expense') && (
+            <div className="space-y-3">
+              {(reportTab === 'all') && (
+                <div className="flex items-center gap-2 border-l-4 border-red-500 pl-3">
+                  <h4 className="font-extrabold text-xs text-slate-800 uppercase tracking-wider">Tabel Pengeluaran Kas</h4>
+                </div>
+              )}
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="border-b border-slate-200 text-slate-400 font-bold uppercase tracking-wider bg-slate-50/50">
+                      <th className="py-3 px-3 w-12">No</th>
+                      <th className="py-3 px-3 w-32">Tanggal</th>
+                      <th className="py-3 px-3 w-40">Kategori / Sumber Kas</th>
+                      <th className="py-3 px-3">Detail Pengeluaran</th>
+                      <th className="py-3 px-3 text-right w-36">Nominal</th>
+                      <th className="py-3 px-3 text-center w-24 print:hidden">Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody className="font-semibold text-slate-700">
+                    {displayExpenseTransactions.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="py-8 text-center text-slate-400 font-bold">
+                          Tidak ada catatan pengeluaran kas dalam periode ini.
+                        </td>
+                      </tr>
+                    ) : (
+                      displayExpenseTransactions.map((tx, idx) => {
+                        const formattedTxDate = new Intl.DateTimeFormat('id-ID', {
+                          day: 'numeric',
+                          month: 'short',
+                          year: 'numeric',
+                        }).format(new Date(tx.date));
+
+                        return (
+                          <tr key={tx.id} className="border-b border-slate-100 hover:bg-slate-50/10 transition-colors align-top">
+                            <td className="py-3.5 px-3 text-slate-400 text-[10px] align-top">{idx + 1}</td>
+                            <td className="py-3.5 px-3 align-top">{formattedTxDate}</td>
+                            <td className="py-3.5 px-3 align-top">
+                              <span className="px-1.5 py-0.5 bg-slate-100 text-slate-700 font-extrabold rounded-md border border-slate-200">
+                                {tx.cashSource || 'Pemasukan Lainnya'}
+                              </span>
+                            </td>
+                            <td className="py-3.5 px-3 align-top">
+                              <div className="flex items-center gap-2">
                                 <span className="font-extrabold text-slate-800">{tx.description}</span>
                                 {tx.photoPath && (
                                   <button
@@ -1264,90 +1344,57 @@ export default function ClassCashManager({
                                   </button>
                                 )}
                               </div>
-                              {tx.cashSource && (
-                                <div className="text-[10px] text-slate-500 font-semibold flex items-center gap-1">
-                                  <span>Sumber:</span>
-                                  <span className="px-1.5 py-0.5 bg-slate-100 text-slate-700 font-bold rounded-md border border-slate-200">
-                                    {tx.cashSource}
-                                  </span>
-                                </div>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      </td>
-                      <td className="py-3.5 px-3 text-right font-mono font-bold text-slate-800 align-top">
-                        {tx.type === 'income' ? (
-                          tx.isMerged ? (
-                            <div>
-                              <div className="h-6 flex items-center justify-end font-black text-slate-900">
-                                Rp {tx.amount.toLocaleString('id-ID')}
-                              </div>
-                              <div className="space-y-1.5 mt-1">
-                                {tx.studentPayments.map((p: any, pIdx: number) => (
-                                  <div key={pIdx} className="h-5 flex items-center justify-end text-slate-400 text-[10px] font-bold">
-                                    Rp {p.amount.toLocaleString('id-ID')}
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          ) : (
-                            <div>
-                              <div className="h-6 flex items-center justify-end font-black text-slate-900">
-                                Rp {tx.amount.toLocaleString('id-ID')}
-                              </div>
-                              <div className="pl-6 mt-1 text-slate-400 text-[10px] font-bold h-5 flex items-center justify-end">
-                                Rp {tx.amount.toLocaleString('id-ID')}
-                              </div>
-                            </div>
-                          )
-                        ) : (
-                          <div className="h-6 flex items-center justify-end font-black text-red-500">
-                            Rp {tx.amount.toLocaleString('id-ID')}
-                          </div>
-                        )}
-                      </td>
-                      <td className="py-3.5 px-3 text-center print:hidden align-top">
-                        <button
-                          onClick={() => handleDeleteTransaction(tx.ids)}
-                          className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
-                          title="Hapus Transaksi"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-            {/* Table Footer Totals */}
-            {filteredTransactions.length > 0 && (
-              <tfoot>
-                <tr className="bg-slate-50/70 font-extrabold border-t border-slate-200">
-                  <td colSpan={4} className="py-3.5 px-3 text-right text-slate-500 uppercase tracking-wide">Total Pemasukan:</td>
-                  <td className="py-3.5 px-3 text-right text-emerald-600 font-mono">
-                    Rp {totalIncome.toLocaleString('id-ID')}
-                  </td>
-                  <td className="print:hidden"></td>
-                </tr>
-                <tr className="bg-slate-50/70 font-extrabold">
-                  <td colSpan={4} className="py-3.5 px-3 text-right text-slate-500 uppercase tracking-wide">Total Pengeluaran:</td>
-                  <td className="py-3.5 px-3 text-right text-red-500 font-mono">
-                    Rp {totalExpense.toLocaleString('id-ID')}
-                  </td>
-                  <td className="print:hidden"></td>
-                </tr>
-                <tr className="bg-indigo-50/50 font-black border-t-2 border-slate-200">
-                  <td colSpan={4} className="py-4 px-3 text-right text-indigo-900 uppercase tracking-wide">Saldo Akhir Terfilter:</td>
-                  <td className="py-4 px-3 text-right text-indigo-900 font-mono text-sm">
-                    Rp {balance.toLocaleString('id-ID')}
-                  </td>
-                  <td className="print:hidden"></td>
-                </tr>
-              </tfoot>
-            )}
-          </table>
+                            </td>
+                            <td className="py-3.5 px-3 text-right font-mono font-bold text-red-500 align-top">
+                              Rp {tx.amount.toLocaleString('id-ID')}
+                            </td>
+                            <td className="py-3.5 px-3 text-center print:hidden align-top">
+                              <button
+                                onClick={() => handleDeleteTransaction(tx.ids)}
+                                className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                                title="Hapus Transaksi"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                  {reportTab === 'expense' && displayExpenseTransactions.length > 0 && (
+                    <tfoot>
+                      <tr className="bg-slate-50/70 font-extrabold border-t border-slate-200">
+                        <td colSpan={4} className="py-3.5 px-3 text-right text-slate-500 uppercase tracking-wide">Total Pengeluaran:</td>
+                        <td className="py-3.5 px-3 text-right text-red-500 font-mono">
+                          Rp {totalExpense.toLocaleString('id-ID')}
+                        </td>
+                        <td className="print:hidden"></td>
+                      </tr>
+                    </tfoot>
+                  )}
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* COMBINED FOOTER TOTALS (Only visible when showing ALL) */}
+          {reportTab === 'all' && (displayIncomeTransactions.length > 0 || displayExpenseTransactions.length > 0) && (
+            <div className="bg-slate-50 border border-slate-150 rounded-2xl p-5 space-y-2 max-w-md ml-auto">
+              <div className="flex justify-between items-center text-xs font-extrabold">
+                <span className="text-slate-500">TOTAL PEMASUKAN:</span>
+                <span className="text-emerald-600 font-mono text-sm">Rp {totalIncome.toLocaleString('id-ID')}</span>
+              </div>
+              <div className="flex justify-between items-center text-xs font-extrabold border-b border-slate-200 pb-2">
+                <span className="text-slate-500">TOTAL PENGELUARAN:</span>
+                <span className="text-red-500 font-mono text-sm">Rp {totalExpense.toLocaleString('id-ID')}</span>
+              </div>
+              <div className="flex justify-between items-center text-xs font-black pt-1">
+                <span className="text-indigo-900">SALDO AKHIR TERFILTER:</span>
+                <span className="text-indigo-900 font-mono text-sm">Rp {balance.toLocaleString('id-ID')}</span>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
