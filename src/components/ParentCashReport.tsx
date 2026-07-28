@@ -789,14 +789,19 @@ export default function ParentCashReport({
                             <td className="py-3.5 px-3 align-top">
                               <span className="font-extrabold text-slate-900">{tx.description}</span>
                             </td>
-                            <td className="py-3.5 px-3 align-top">
+                             <td className="py-3.5 px-3 align-top">
                               {tx.isMerged ? (
-                                <div className="space-y-1.5 pl-3 border-l-2 border-slate-100">
-                                  {tx.studentPayments.map((p: any, pIdx: number) => (
-                                    <div key={pIdx} className="h-5 flex items-center text-slate-500 font-semibold text-xs">
-                                      {p.name}
-                                    </div>
-                                  ))}
+                                <div>
+                                  <div className="h-6 flex items-center text-slate-400 font-bold text-[10px] uppercase tracking-wider pl-3 border-l-2 border-slate-100">
+                                    Total Gabungan:
+                                  </div>
+                                  <div className="space-y-1.5 pl-3 border-l-2 border-slate-100">
+                                    {tx.studentPayments.map((p: any, pIdx: number) => (
+                                      <div key={pIdx} className="h-5 flex items-center text-slate-500 font-semibold text-xs">
+                                        {p.name}
+                                      </div>
+                                    ))}
+                                  </div>
                                 </div>
                               ) : tx.studentName ? (
                                 <div className="pl-3 border-l-2 border-slate-100 text-slate-500 font-semibold text-xs h-5 flex items-center">

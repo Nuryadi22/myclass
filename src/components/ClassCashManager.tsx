@@ -1150,7 +1150,7 @@ export default function ClassCashManager({
               onClick={() => setReportTab('all')}
               className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer flex items-center gap-1 ${
                 reportTab === 'all'
-                  ? 'bg-slate-850 text-white shadow-sm'
+                  ? 'bg-indigo-600 text-white shadow-sm'
                   : 'text-slate-500 hover:text-slate-800'
               }`}
             >
@@ -1263,12 +1263,17 @@ export default function ClassCashManager({
                             </td>
                             <td className="py-3.5 px-3 align-top">
                               {tx.isMerged ? (
-                                <div className="space-y-1.5 pl-3 border-l-2 border-slate-100">
-                                  {tx.studentPayments.map((p: any, pIdx: number) => (
-                                    <div key={pIdx} className="h-5 flex items-center text-slate-500 font-semibold text-xs">
-                                      {p.name}
-                                    </div>
-                                  ))}
+                                <div>
+                                  <div className="h-6 flex items-center text-slate-400 font-bold text-[10px] uppercase tracking-wider pl-3 border-l-2 border-slate-100">
+                                    Total Gabungan:
+                                  </div>
+                                  <div className="space-y-1.5 pl-3 border-l-2 border-slate-100">
+                                    {tx.studentPayments.map((p: any, pIdx: number) => (
+                                      <div key={pIdx} className="h-5 flex items-center text-slate-500 font-semibold text-xs">
+                                        {p.name}
+                                      </div>
+                                    ))}
+                                  </div>
                                 </div>
                               ) : tx.studentName ? (
                                 <div className="pl-3 border-l-2 border-slate-100 text-slate-500 font-semibold text-xs h-5 flex items-center">
