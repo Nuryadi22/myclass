@@ -14,13 +14,19 @@ export default function manifest(): MetadataRoute.Manifest {
     icons: [
       {
         src: '/myclass.png',
-        sizes: 'any',
+        sizes: '192x192',
         type: 'image/png',
         purpose: 'any',
       },
       {
         src: '/myclass.png',
-        sizes: 'any',
+        sizes: '512x512',
+        type: 'image/png',
+        purpose: 'maskable',
+      },
+      {
+        src: '/myclass-maskable.png',
+        sizes: '512x512',
         type: 'image/png',
         purpose: 'maskable',
       },
