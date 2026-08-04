@@ -22,7 +22,7 @@ export default function manifest(): MetadataRoute.Manifest {
         src: '/myclass.png',
         sizes: '512x512',
         type: 'image/png',
-        purpose: 'maskable',
+        purpose: 'any',
       },
       {
         src: '/myclass-maskable.png',
