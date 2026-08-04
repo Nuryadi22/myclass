@@ -36,6 +36,12 @@ export default function SplashScreen() {
               className="splash-logo"
               width={110}
               height={110}
+              style={{
+                width: 110,
+                height: 110,
+                objectFit: 'contain',
+                mixBlendMode: 'multiply',
+              }}
             />
             <div className="logo-glow" />
           </div>
@@ -81,8 +87,10 @@ export default function SplashScreen() {
         .splash-logo {
           width: 110px !important;
           height: 110px !important;
+          max-width: 110px !important;
           object-fit: contain;
           z-index: 2;
+          mix-blend-mode: multiply;
           animation: logoEntrance 1.2s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
         }
 
