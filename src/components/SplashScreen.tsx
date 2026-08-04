@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import Image from 'next/image'
 
 export default function SplashScreen() {
   const [visible, setVisible] = useState(true)
@@ -30,18 +29,11 @@ export default function SplashScreen() {
       <div id="splash-screen" className={fadeOut ? 'fade-out' : ''}>
         <div className="splash-content">
           <div className="logo-wrapper">
-            <Image
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
               src="/myclass.png"
               alt="MyClass Logo"
               className="splash-logo"
-              width={110}
-              height={110}
-              style={{
-                width: 110,
-                height: 110,
-                objectFit: 'contain',
-                mixBlendMode: 'multiply',
-              }}
             />
             <div className="logo-glow" />
           </div>
@@ -85,9 +77,8 @@ export default function SplashScreen() {
         }
 
         .splash-logo {
-          width: 110px !important;
-          height: 110px !important;
-          max-width: 110px !important;
+          width: 110px;
+          height: 110px;
           object-fit: contain;
           z-index: 2;
           mix-blend-mode: multiply;
