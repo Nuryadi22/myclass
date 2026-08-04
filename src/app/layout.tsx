@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import SplashScreen from "@/components/SplashScreen";
 
 export const metadata: Metadata = {
   title: "MyClass - Aplikasi Monitoring Kelas & Keaktifan Murid",
@@ -23,6 +24,7 @@ export default function RootLayout({
         <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
       </head>
       <body className="h-full font-sans overflow-hidden flex flex-col bg-slate-50 text-slate-800">
+        <SplashScreen />
         {children}
       </body>
     </html>
