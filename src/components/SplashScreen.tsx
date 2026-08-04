@@ -37,7 +37,9 @@ export default function SplashScreen() {
             />
             <div className="logo-glow" />
           </div>
-          <h1 className="splash-title">MyClass</h1>
+          <h1 className="splash-title">MyClass <br />
+          <span className="splash-subtitle">bykelasbusifa</span>
+          </h1>
           <div className="loading-bar">
             <div className="loading-progress" />
           </div>
@@ -105,6 +107,20 @@ export default function SplashScreen() {
           opacity: 0;
           animation: fadeInText 0.8s ease forwards;
           animation-delay: 0.4s;
+        }
+          
+        .splash-subtitle {
+          display: block;                  /* Memaksa teks pindah ke baris bawah */
+          font-family: system-ui, -apple-system, sans-serif;
+          font-size: 1rem;                 /* Ukuran dibuat sedikit lebih kecil dari title (1.5rem) */
+          font-weight: 400;                /* Ketebalan normal/standar */
+          font-style: italic;              /* Membuat teks menjadi miring (italic) */
+          color: #312e81;                  /* Warna senada, sedikit lebih muda dari judul */
+          letter-spacing: 0.025em;
+          margin-top: 0.25rem;             /* Jarak antara judul utama dan sub-judul */
+          opacity: 0;
+          animation: fadeInText 0.8s ease forwards;
+          animation-delay: 0.6s;           /* Muncul sedikit setelah judul utama (efek bertahap) */
         }
 
         .loading-bar {
