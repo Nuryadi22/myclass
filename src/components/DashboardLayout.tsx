@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { logoutAction } from '@/app/actions/auth';
 import ConfirmModal from './ConfirmModal';
+import PushNotificationManager from './PushNotificationManager';
 import {
   LayoutDashboard,
   Users,
@@ -22,7 +23,9 @@ import {
   Coins,
   Calendar,
   Camera,
-  RotateCcw
+  RotateCcw,
+  BookOpen,
+  GraduationCap
 } from 'lucide-react';
 
 interface UserSession {
@@ -128,6 +131,12 @@ export default function DashboardLayout({ user, children, childName }: Dashboard
           href: '/teacher/reports',
           icon: BarChart3,
           matchPrefix: '/teacher/reports',
+        },
+        {
+          name: 'Input Nilai',
+          href: '/teacher/grades',
+          icon: GraduationCap,
+          matchPrefix: '/teacher/grades',
         },
         {
           name: 'Keuangan Kelas',
@@ -269,6 +278,9 @@ export default function DashboardLayout({ user, children, childName }: Dashboard
               {user.name.substring(0, 2).toUpperCase()}
             </div>
           </div>
+
+          {/* Push Notification Bell */}
+          <PushNotificationManager />
 
           {/* Logout Button */}
           <button

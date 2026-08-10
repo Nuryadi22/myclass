@@ -6,6 +6,8 @@ import { hashPassword } from '@/lib/auth';
 import { revalidatePath } from 'next/cache';
 import { writeFile, mkdir, unlink, readdir } from 'fs/promises';
 import { join } from 'path';
+import { sendPushToUser } from '@/lib/push';
+import { SUBJECTS } from '@/lib/subjects';
 
 // Helper to generate random string for QR Code Token
 function generateQrToken() {
@@ -239,6 +241,25 @@ export async function recordAttendanceAction(data: {
         revalidatePath('/parent/dashboard');
         revalidatePath('/parent/reports');
 
+        // Send push notification to parent
+        const updatedStudent = await prisma.student.findUnique({
+          where: { id: student.id },
+          include: { parent: { select: { id: true } } },
+        });
+        if (updatedStudent?.parent?.id) {
+          let statusLabel = 'Hadir';
+          if (status === 'sick') statusLabel = 'Sakit 🤒';
+          else if (status === 'excused') statusLabel = 'Izin ✉️';
+          else if (status === 'absent') statusLabel = 'Alfa ✕';
+          else if (status === 'late') statusLabel = 'Hadir ✓';
+          await sendPushToUser(updatedStudent.parent.id, {
+            title: '📋 Update Presensi MyClass',
+            body: `Kehadiran ${student.name} diperbarui: ${statusLabel} pada ${nowTimeStr.substring(0, 5)} WIB.`,
+            url: '/parent/dashboard',
+            tag: `attendance-${student.id}`,
+          }).catch(console.error);
+        }
+
         return {
           success: true,
           message: `Kehadiran ${student.name} berhasil diperbarui menjadi ${label}.`,
@@ -299,6 +320,24 @@ export async function recordAttendanceAction(data: {
     revalidatePath(`/teacher/reports/${student.id}`);
     revalidatePath('/parent/dashboard');
     revalidatePath('/parent/reports');
+
+    // Send push notification to parent
+    const studentWithParent = await prisma.student.findUnique({
+      where: { id: student.id },
+      include: { parent: { select: { id: true } } },
+    });
+    if (studentWithParent?.parent?.id) {
+      let statusEmoji = '✓';
+      if (status === 'sick') statusEmoji = '🤒';
+      else if (status === 'excused') statusEmoji = '✉️';
+      else if (status === 'absent') statusEmoji = '✕';
+      await sendPushToUser(studentWithParent.parent.id, {
+        title: '📢 Presensi Sekolah MyClass',
+        body: `${statusEmoji} ${student.name} telah dipresensi: ${label} pada pukul ${nowTimeStr.substring(0, 5)} WIB.`,
+        url: '/parent/dashboard',
+        tag: `attendance-${student.id}`,
+      }).catch(console.error);
+    }
 
     return {
       success: true,
@@ -1090,5 +1129,103 @@ export async function updateStudentAction(
   }
 }
 
+// ===================== GRADE ACTIONS =====================
 
 
+export async function storeGradesAction(prevState: any, formData: FormData) {
+  const session = await getSession();
+  if (!session || session.role !== 'teacher') {
+    return { error: 'Akses ditolak.' };
+  }
+
+  const subject = formData.get('subject') as string;
+  const material = formData.get('material') as string;
+
+  if (!subject || !material) {
+    return { error: 'Mata pelajaran dan materi wajib diisi.' };
+  }
+
+  try {
+    const className = session.className;
+    const students = await prisma.student.findMany({
+      where: className ? { className } : undefined,
+      select: { id: true, name: true },
+      orderBy: { name: 'asc' },
+    });
+
+    const gradesToCreate: { studentId: number; teacherId: number; subject: string; material: string; score: number }[] = [];
+    const gradesToUpdate: { id: number; score: number }[] = [];
+
+    for (const student of students) {
+      const scoreStr = formData.get(`score_${student.id}`) as string;
+      if (!scoreStr || scoreStr.trim() === '') continue;
+      const score = parseFloat(scoreStr);
+      if (isNaN(score) || score < 0 || score > 100) continue;
+
+      const existing = await prisma.grade.findFirst({
+        where: {
+          studentId: student.id,
+          subject: subject.trim(),
+          material: material.trim(),
+        },
+      });
+
+      if (existing) {
+        gradesToUpdate.push({ id: existing.id, score });
+      } else {
+        gradesToCreate.push({
+          studentId: student.id,
+          teacherId: session.userId,
+          subject: subject.trim(),
+          material: material.trim(),
+          score,
+        });
+      }
+    }
+
+    if (gradesToCreate.length === 0 && gradesToUpdate.length === 0) {
+      return { error: 'Tidak ada nilai yang diisi. Silakan isi minimal satu nilai.' };
+    }
+
+    await prisma.$transaction([
+      ...gradesToCreate.map((g) => prisma.grade.create({ data: g })),
+      ...gradesToUpdate.map((g) => prisma.grade.update({ where: { id: g.id }, data: { score: g.score } })),
+    ]);
+
+    revalidatePath('/teacher/grades');
+    return { success: true, message: `Nilai ${subject} - ${material} berhasil disimpan.` };
+  } catch (error: any) {
+    console.error('Store grades error:', error);
+    return { error: 'Gagal menyimpan nilai. Silakan coba lagi.' };
+  }
+}
+
+export async function deleteGradesBySubjectMaterialAction(subject: string, material: string) {
+  const session = await getSession();
+  if (!session || session.role !== 'teacher') {
+    return { error: 'Akses ditolak.' };
+  }
+
+  try {
+    const className = session.className;
+    const students = await prisma.student.findMany({
+      where: className ? { className } : undefined,
+      select: { id: true },
+    });
+    const studentIds = students.map((s) => s.id);
+
+    await prisma.grade.deleteMany({
+      where: {
+        studentId: { in: studentIds },
+        subject: subject.trim(),
+        material: material.trim(),
+      },
+    });
+
+    revalidatePath('/teacher/grades');
+    return { success: true, message: 'Data nilai berhasil dihapus.' };
+  } catch (error: any) {
+    console.error('Delete grades error:', error);
+    return { error: 'Gagal menghapus nilai.' };
+  }
+}

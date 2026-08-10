@@ -6,6 +6,7 @@ import { Calendar, User, Star, ClipboardCheck, CheckCircle2, AlertCircle } from 
 import ChildProgressChart from '@/components/ChildProgressChart';
 import ClassCashPieChart from '@/components/ClassCashPieChart';
 import AttendanceNotificationModal from '@/components/AttendanceNotificationModal';
+import RealtimeAttendanceAlert from '@/components/RealtimeAttendanceAlert';
 
 export const dynamic = 'force-dynamic';
 
@@ -379,8 +380,11 @@ export default async function ParentDashboardPage() {
         )}
       </div>
 
-      {/* Attendance Modal (Renders if cookie showNotification is true) */}
+      {/* Attendance Modal on Login (Renders if cookie showNotification is true) */}
       <AttendanceNotificationModal childrenData={childrenData} showNotification={showNotification} />
+
+      {/* Realtime Attendance Alert - polls every 30s for new attendance */}
+      <RealtimeAttendanceAlert />
     </div>
   );
 }

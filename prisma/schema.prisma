@@ -30,6 +30,8 @@ model User {
   loggedPrayers            Prayer[]                  @relation("ParentPrayers")
   discussions              Discussion[]
   parentAttendanceRequests ParentAttendanceRequest[] @relation("ParentAttendanceRequests")
+  pushSubscriptions        PushSubscription[]
+  grades                   Grade[]                   @relation("TeacherGrades")
 }
 
 model Student {
@@ -52,6 +54,7 @@ model Student {
   prayers                  Prayer[]
   parentAttendanceRequests ParentAttendanceRequest[]
   classCash                ClassCash[]
+  grades                   Grade[]
 }
 
 model Attendance {
@@ -161,5 +164,29 @@ model ClassBill {
   amount      Float
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+}
+
+model PushSubscription {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Grade {
+  id        Int      @id @default(autoincrement())
+  studentId Int
+  student   Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  teacherId Int?
+  teacher   User?    @relation("TeacherGrades", fields: [teacherId], references: [id], onDelete: SetNull)
+  subject   String   // Mata Pelajaran
+  material  String   // Materi / KD
+  score     Float    // Nilai
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
