@@ -1,7 +1,9 @@
 'use client';
 
 import React, { useState, useTransition, useMemo } from 'react';
-import { GraduationCap, Plus, X, Save, ChevronDown, BookOpen, Trash2, Filter, Search } from 'lucide-react';
+import { GraduationCap, Plus, X, Save, ChevronDown, BookOpen, Trash2, Filter, Search, Eye, Edit, FileSpreadsheet } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import * as XLSX from 'xlsx';
 import { storeGradesAction, deleteGradesBySubjectMaterialAction } from '@/app/actions/teacher';
 import { SUBJECTS } from '@/lib/subjects';
 
@@ -51,6 +53,8 @@ export default function GradeManager({ students, grades }: GradeManagerProps) {
   const [actionState, setActionState] = useState<{ error?: string; success?: boolean; message?: string } | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{ subject: string; material: string } | null>(null);
+  const [viewGradeTarget, setViewGradeTarget] = useState<{ subject: string; material: string } | null>(null);
+  const router = useRouter();
 
   // Form state
   const [formSubject, setFormSubject] = useState('');
@@ -152,7 +156,7 @@ export default function GradeManager({ students, grades }: GradeManagerProps) {
       if ((result as any).success) {
         setTimeout(() => {
           setIsModalOpen(false);
-          window.location.reload();
+          router.refresh();
         }, 1200);
       }
     });
@@ -165,7 +169,7 @@ export default function GradeManager({ students, grades }: GradeManagerProps) {
     setIsDeleting(false);
     setDeleteTarget(null);
     if ((result as any).success) {
-      window.location.reload();
+      router.refresh();
     }
   };
 
@@ -183,6 +187,69 @@ export default function GradeManager({ students, grades }: GradeManagerProps) {
     return cols;
   }, [filteredGrades]);
 
+  const handleEditGrade = () => {
+    if (!viewGradeTarget) return;
+    setFormSubject(viewGradeTarget.subject);
+    setFormMaterial(viewGradeTarget.material);
+    
+    // pre-fill scores
+    const existing: Record<number, string> = {};
+    for (const g of grades) {
+      if (g.subject === viewGradeTarget.subject && g.material === viewGradeTarget.material) {
+        existing[g.studentId] = g.score.toString();
+      }
+    }
+    setScores(existing);
+    
+    setViewGradeTarget(null);
+    setIsModalOpen(true);
+  };
+
+  const handleExportExcel = () => {
+    let title = 'Laporan Nilai Murid';
+    
+    const subjectText = filterSubject ? filterSubject : 'Semua Mata Pelajaran';
+
+    const data: any[][] = [];
+    data.push([title]);
+    data.push([`Mata Pelajaran: ${subjectText}`]);
+    data.push([]); // Empty row
+
+    const headerRow = ['No', 'Nama Murid', 'NISN'];
+    subjectMaterialCols.forEach(col => {
+      headerRow.push(col.material);
+    });
+    data.push(headerRow);
+
+    const filteredStudents = students.filter((s) => !searchStudent || s.name.toLowerCase().includes(searchStudent.toLowerCase()));
+
+    filteredStudents.forEach((student, index) => {
+      const rowData: any[] = [
+        index + 1,
+        student.name,
+        student.studentId
+      ];
+      
+      subjectMaterialCols.forEach(col => {
+        const key = `${col.subject}__${col.material}`;
+        const score = gradesByStudent[student.id]?.scores[key];
+        rowData.push(score !== undefined ? score : '');
+      });
+      
+      data.push(rowData);
+    });
+
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet(data);
+    
+    if (!ws['!merges']) ws['!merges'] = [];
+    ws['!merges'].push({ s: { r: 0, c: 0 }, e: { r: 0, c: headerRow.length - 1 } });
+    ws['!merges'].push({ s: { r: 1, c: 0 }, e: { r: 1, c: headerRow.length - 1 } });
+    
+    XLSX.utils.book_append_sheet(wb, ws, "Nilai");
+    XLSX.writeFile(wb, `${title.replace(/[\s/]/g, '_')}_${subjectText.replace(/[\s/]/g, '_')}.xlsx`);
+  };
+
   return (
     <div className="space-y-8">
       {/* Header + Controls */}
@@ -196,13 +263,22 @@ export default function GradeManager({ students, grades }: GradeManagerProps) {
             Input, kelola, dan pantau nilai seluruh murid berdasarkan mata pelajaran.
           </p>
         </div>
-        <button
-          onClick={handleOpenModal}
-          className="flex items-center gap-2 px-5 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-bold text-sm shadow-lg shadow-indigo-100 transition-all hover:scale-105 active:scale-95 cursor-pointer shrink-0"
-        >
-          <Plus className="w-4 h-4" />
-          Input Nilai Baru
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleExportExcel}
+            className="flex items-center gap-2 px-5 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl font-bold text-sm shadow-lg shadow-emerald-100 transition-all hover:scale-105 active:scale-95 cursor-pointer shrink-0"
+          >
+            <FileSpreadsheet className="w-4 h-4" />
+            Cetak Nilai
+          </button>
+          <button
+            onClick={handleOpenModal}
+            className="flex items-center gap-2 px-5 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-bold text-sm shadow-lg shadow-indigo-100 transition-all hover:scale-105 active:scale-95 cursor-pointer shrink-0"
+          >
+            <Plus className="w-4 h-4" />
+            Input Nilai Baru
+          </button>
+        </div>
       </div>
 
       {/* Filter Bar */}
@@ -271,76 +347,127 @@ export default function GradeManager({ students, grades }: GradeManagerProps) {
 
       {/* Grade Table */}
       <div className="bg-white rounded-3xl border border-slate-100 shadow-xs overflow-hidden">
-        {students.length === 0 ? (
-          <div className="p-12 text-center text-slate-400 font-bold text-sm">
-            Belum ada murid terdaftar di kelas ini.
-          </div>
-        ) : filteredGrades.length === 0 && (filterSubject || filterMaterial || searchStudent) ? (
-          <div className="p-12 text-center text-slate-400 font-bold text-sm">
-            Tidak ada nilai ditemukan untuk filter yang dipilih.
-          </div>
-        ) : grades.length === 0 ? (
+        {subjectMaterialCols.length === 0 ? (
           <div className="p-12 text-center space-y-3">
-            <GraduationCap className="w-12 h-12 text-slate-200 mx-auto" />
-            <p className="text-slate-400 font-bold text-sm">Belum ada data nilai yang diinput.</p>
-            <button
-              onClick={handleOpenModal}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 rounded-xl font-bold text-xs transition-colors cursor-pointer"
-            >
-              <Plus className="w-3.5 h-3.5" /> Input Nilai Pertama
-            </button>
+            <BookOpen className="w-12 h-12 text-slate-200 mx-auto" />
+            <p className="text-slate-400 font-bold text-sm">
+              {grades.length === 0 ? 'Belum ada data materi yang diinput.' : 'Tidak ada data ditemukan untuk filter yang dipilih.'}
+            </p>
+            {grades.length === 0 && students.length > 0 && (
+              <button
+                onClick={handleOpenModal}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 rounded-xl font-bold text-xs transition-colors cursor-pointer mt-2"
+              >
+                <Plus className="w-3.5 h-3.5" /> Input Nilai Pertama
+              </button>
+            )}
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-xs">
+            <table className="w-full text-sm">
               <thead>
-                <tr className="bg-slate-50 border-b border-slate-100">
-                  <th className="sticky left-0 bg-slate-50 text-left px-5 py-3.5 font-extrabold text-slate-600 whitespace-nowrap z-10">
-                    Nama Murid
-                  </th>
-                  {subjectMaterialCols.map((col) => (
-                    <th key={`${col.subject}__${col.material}`} className="px-4 py-3.5 text-center font-extrabold text-slate-600 min-w-[120px]">
-                      <div className="space-y-0.5">
-                        <div className="text-indigo-700 truncate max-w-[110px]">{col.subject}</div>
-                        <div className="text-slate-400 font-semibold truncate max-w-[110px]">{col.material}</div>
-                      </div>
-                      <button
-                        onClick={() => setDeleteTarget({ subject: col.subject, material: col.material })}
-                        className="mt-1 p-0.5 text-red-300 hover:text-red-500 transition-colors cursor-pointer"
-                        title="Hapus kolom nilai ini"
-                      >
-                        <Trash2 className="w-3 h-3" />
-                      </button>
-                    </th>
-                  ))}
-                  {subjectMaterialCols.length === 0 && (
-                    <th className="px-4 py-3.5 text-center text-slate-400 font-semibold">
-                      Pilih filter untuk melihat kolom nilai
-                    </th>
-                  )}
+                <tr className="bg-slate-50 border-b border-slate-100 text-left">
+                  <th className="px-5 py-4 font-extrabold text-slate-600">Mata Pelajaran</th>
+                  <th className="px-5 py-4 font-extrabold text-slate-600">Materi / KD</th>
+                  <th className="px-5 py-4 font-extrabold text-slate-600 text-right">Aksi</th>
                 </tr>
               </thead>
               <tbody>
-                {students
-                  .filter((s) => !searchStudent || s.name.toLowerCase().includes(searchStudent.toLowerCase()))
-                  .map((student, idx) => (
-                    <tr
-                      key={student.id}
-                      className={`border-b border-slate-50 hover:bg-indigo-50/30 transition-colors ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/30'}`}
-                    >
-                      <td className="sticky left-0 bg-white px-5 py-3 font-bold text-slate-800 whitespace-nowrap z-10">
-                        <div className="flex items-center gap-2">
-                          <div className="w-7 h-7 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-[10px] font-extrabold shrink-0">
-                            {student.name.substring(0, 2).toUpperCase()}
-                          </div>
-                          {student.name}
-                        </div>
-                      </td>
-                      {subjectMaterialCols.map((col) => {
-                        const key = `${col.subject}__${col.material}`;
-                        const score = gradesByStudent[student.id]?.scores[key];
-                        return (
-                          <td key={key} className="px-4 py-3 text-center">
+                {subjectMaterialCols.map((col, idx) => (
+                  <tr
+                    key={`${col.subject}__${col.material}`}
+                    className={`border-b border-slate-50 hover:bg-indigo-50/30 transition-colors ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/30'}`}
+                  >
+                    <td className="px-5 py-4 font-bold text-indigo-700">
+                      {col.subject}
+                    </td>
+                    <td className="px-5 py-4 font-semibold text-slate-700">
+                      {col.material}
+                    </td>
+                    <td className="px-5 py-4 text-right">
+                      <div className="flex justify-end gap-2">
+                        <button
+                          onClick={() => setViewGradeTarget({ subject: col.subject, material: col.material })}
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 rounded-lg font-bold text-xs transition-colors cursor-pointer"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                          Lihat Nilai
+                        </button>
+                        <button
+                          onClick={() => setDeleteTarget({ subject: col.subject, material: col.material })}
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 text-red-600 hover:bg-red-100 rounded-lg font-bold text-xs transition-colors cursor-pointer"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          Hapus
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* View Grades Modal */}
+      {viewGradeTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+          <div className="bg-white w-full max-w-2xl rounded-3xl border border-slate-100 shadow-2xl flex flex-col max-h-[92vh]">
+            <div className="flex items-center justify-between p-6 border-b border-slate-100 shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                  <GraduationCap className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-extrabold text-slate-800 leading-tight">Detail Nilai Murid</h3>
+                  <p className="text-[11px] text-slate-400 font-semibold mt-0.5">{viewGradeTarget.subject} - {viewGradeTarget.material}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleEditGrade}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 text-amber-600 hover:bg-amber-100 rounded-xl transition-all cursor-pointer text-xs font-bold"
+                >
+                  <Edit className="w-4 h-4" /> Edit Nilai
+                </button>
+                <button
+                  onClick={() => setViewGradeTarget(null)}
+                  className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-50 rounded-xl transition-all cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+            
+            <div className="overflow-y-auto flex-1 p-6">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-slate-100">
+                    <th className="text-left font-extrabold pb-3 text-slate-600">Nama Murid</th>
+                    <th className="text-center font-extrabold pb-3 text-slate-600">Nilai</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {students
+                    .filter((s) => !searchStudent || s.name.toLowerCase().includes(searchStudent.toLowerCase()))
+                    .map((student, idx) => {
+                      const key = `${viewGradeTarget.subject}__${viewGradeTarget.material}`;
+                      const score = gradesByStudent[student.id]?.scores[key];
+                      return (
+                        <tr key={student.id} className={`border-b border-slate-50 ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/30'}`}>
+                          <td className="py-3 px-2 font-bold text-slate-800">
+                            <div className="flex items-center gap-2.5">
+                              <div className="w-7 h-7 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-[10px] font-extrabold shrink-0">
+                                {student.name.substring(0, 2).toUpperCase()}
+                              </div>
+                              <div>
+                                <p className="text-xs font-bold text-slate-800 leading-tight">{student.name}</p>
+                                <p className="text-[10px] text-slate-400 font-semibold">{student.studentId}</p>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="py-3 px-2 text-center">
                             {score !== undefined ? (
                               <div className="flex flex-col items-center gap-1">
                                 <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg font-extrabold ${getScoreColor(score)}`}>
@@ -352,15 +479,23 @@ export default function GradeManager({ students, grades }: GradeManagerProps) {
                               <span className="text-slate-300 font-bold">—</span>
                             )}
                           </td>
-                        );
-                      })}
-                    </tr>
-                  ))}
-              </tbody>
-            </table>
+                        </tr>
+                      );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <div className="shrink-0 px-6 py-4 border-t border-slate-100 flex gap-3 justify-end">
+              <button
+                onClick={() => setViewGradeTarget(null)}
+                className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold text-sm transition-colors cursor-pointer"
+              >
+                Tutup
+              </button>
+            </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Delete Confirmation */}
       {deleteTarget && (
