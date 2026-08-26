@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation';
 import { logoutAction } from '@/app/actions/auth';
 import ConfirmModal from './ConfirmModal';
 import PushNotificationManager from './PushNotificationManager';
+import InstallAppButton from './InstallAppButton';
 import {
   LayoutDashboard,
   Users,
@@ -199,7 +200,7 @@ export default function DashboardLayout({ user, children, childName }: Dashboard
   };
 
   const renderNavLinks = () => {
-    return navLinks.map((link) => {
+    const links = navLinks.map((link) => {
       const isActive = link.matchPrefix
         ? pathname.startsWith(link.matchPrefix)
         : pathname === link.href;
@@ -218,6 +219,18 @@ export default function DashboardLayout({ user, children, childName }: Dashboard
         </Link>
       );
     });
+
+    if (!isAdmin && !isTeacher) {
+      links.push(
+        <InstallAppButton
+          key="install-app"
+          className={`flex w-full items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all duration-250 cursor-pointer border-none bg-transparent ${hoverBtnClass}`}
+          onClick={() => setMobileSidebarOpen(false)}
+        />
+      );
+    }
+
+    return links;
   };
 
   return (
